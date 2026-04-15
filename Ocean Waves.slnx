@@ -1,0 +1,5 @@
+﻿<Solution>
+  <Project Path="Crest.csproj" />
+  <Project Path="Crest.Examples.csproj" />
+  <Project Path="Crest.Helpers.Editor.csproj" />
+</Solution>
