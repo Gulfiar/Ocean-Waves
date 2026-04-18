@@ -131,6 +131,14 @@ PrefabInstance:
       propertyPath: m_IsActive
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 8066748594655780890, guid: ddf71bfb72c45407fb8cea42d3aaeac4, type: 3}
+      propertyPath: _primaryLight
+      value: 
+      objectReference: {fileID: 0}
+    - target: {fileID: 8066748594655780890, guid: ddf71bfb72c45407fb8cea42d3aaeac4, type: 3}
+      propertyPath: _globalWindSpeed
+      value: 150
+      objectReference: {fileID: 0}
     - target: {fileID: 9037604615445586465, guid: ddf71bfb72c45407fb8cea42d3aaeac4, type: 3}
       propertyPath: m_RootOrder
       value: 0
