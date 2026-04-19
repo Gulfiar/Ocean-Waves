@@ -130,6 +130,7 @@ GameObject:
   - component: {fileID: 77222650}
   - component: {fileID: 77222649}
   - component: {fileID: 77222648}
+  - component: {fileID: 77222651}
   m_Layer: 0
   m_Name: Ocean
   m_TagString: Untagged
@@ -195,6 +196,37 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &77222651
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 77222647}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9fce818c348c44b469fa94976f198ab2, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::DatabaseManager
+  fetchOnStart: 1
+  autoRefreshInterval: 0
+  showDebugOverlay: 1
+  queryDate: 2026-04-18
+  queryHour: 0
+  testRefreshInterval: 5
+  currentKey: "\u2014"
+  status: Idle
+  display_WVHT: 0
+  display_WSPD: 0
+  display_WDIR: 0
+  display_MWD: 0
+  display_APD: 0
+  display_DPD: 0
+  display_GST: 0
+  display_PRES: 0
+  display_ATMP: 0
+  display_WTMP: 0
+  display_DEWP: 0
 --- !u!1 &705507993
 GameObject:
   m_ObjectHideFlags: 0
