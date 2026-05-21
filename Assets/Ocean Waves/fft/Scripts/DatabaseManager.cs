@@ -1,702 +1,762 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using UnityEngine;
 using UnityEngine.Networking;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+
+// ═══════════════════════════════════════════════════════════════════
+//  DATA MODELS
+// ═══════════════════════════════════════════════════════════════════
 
 /// <summary>
-/// Data model matching Firebase Realtime Database structure.
-/// Key format: "2026041800" (yyyyMMddHH)
+/// GeoPoint data matching Firestore geoPointValue.
+/// </summary>
+[Serializable]
+public class GeoPoint
+{
+    public double latitude;
+    public double longitude;
+
+    public override string ToString() => $"[{latitude}°, {longitude}°]";
+}
+
+/// <summary>
+/// Data model matching Firestore document structure.
+/// 
+/// Fields:
+///   loc_name  — Location name (e.g., "Laut Banda")
+///   posisi    — GeoPoint (latitude, longitude)
+///   date      — "2026-05-06"
+///   time      — "07:00"
+///   TEMP      — Temperature (°C)
+///   HUMID     — Humidity (%)
+///   WDIR      — Wind Direction (compass string)
+///   WSPD      — Wind Speed (knots)
+///   GST       — Gust Speed (knots)
+///   WVHT      — Significant Wave Height (m)
+///   CDIR      — Current Direction (compass string)
+///   CSPD      — Current Speed (m/s)
+///   timestamp — Firebase Timestamp
 /// </summary>
 [Serializable]
 public class BuoyData
 {
-    public string date;    // "2026-04-18"
-    public string time;    // "00:00"
-    public int WDIR;       // Wind Direction (degrees)
-    public float WSPD;     // Wind Speed (m/s)
-    public float GST;      // Gust Speed (m/s)
-    public float WVHT;     // Significant Wave Height (m)
-    public int DPD;        // Dominant Wave Period (s)
-    public float APD;      // Average Wave Period (s)
-    public int MWD;        // Mean Wave Direction (degrees)
-    public float PRES;     // Atmospheric Pressure (hPa)
-    public float ATMP;     // Air Temperature (°C)
-    public float WTMP;     // Water Temperature (°C)
-    public float DEWP;     // Dewpoint Temperature (°C)
+    public string loc_name;
+    public GeoPoint posisi;
+    public string date;
+    public string time;
+    public float TEMP;
+    public float HUMID;
+    public string WDIR;
+    public int WSPD;
+    public int GST;
+    public float WVHT;
+    public string CDIR;
+    public float CSPD;
+    public string timestamp;
+
+    public float WindSpeedMs => WSPD * 0.514444f;
+    public float GustSpeedMs => GST * 0.514444f;
+    public float WindDirectionDeg => CompassToDegrees(WDIR);
+    public float CurrentDirectionDeg => CompassToDegrees(CDIR);
+
+    public static float CompassToDegrees(string compass)
+    {
+        if (string.IsNullOrEmpty(compass)) return 0f;
+        switch (compass.Trim().ToUpper())
+        {
+            case "N": return 0f; case "NNE": return 22.5f;
+            case "NE": return 45f; case "ENE": return 67.5f;
+            case "E": return 90f; case "ESE": return 112.5f;
+            case "SE": return 135f; case "SSE": return 157.5f;
+            case "S": return 180f; case "SSW": return 202.5f;
+            case "SW": return 225f; case "WSW": return 247.5f;
+            case "W": return 270f; case "WNW": return 292.5f;
+            case "NW": return 315f; case "NNW": return 337.5f;
+            default:
+                Debug.LogWarning($"[BuoyData] Unknown compass direction: '{compass}'");
+                return 0f;
+        }
+    }
 
     public override string ToString()
     {
-        return $"[{date} {time}] WVHT={WVHT}m, WSPD={WSPD}m/s, MWD={MWD}°, WDIR={WDIR}°";
+        return $"[{loc_name} | {date} {time}] WVHT={WVHT}m, WSPD={WSPD}kn({WindSpeedMs:F1}m/s), WDIR={WDIR}, TEMP={TEMP}°C";
     }
 }
 
+// ═══════════════════════════════════════════════════════════════════
+//  FIRESTORE JWT AUTH HELPER
+// ═══════════════════════════════════════════════════════════════════
+
 /// <summary>
-/// Manages communication with Firebase Realtime Database via REST API.
-/// Provides methods to fetch, send, update, and delete buoy data.
+/// Minimal JWT generator for Google Service Account OAuth2.
+/// Creates a signed JWT and exchanges it for an access token.
+/// </summary>
+public static class FirestoreAuth
+{
+    [Serializable] private class ServiceAccountKey
+    {
+        public string project_id;
+        public string private_key;
+        public string client_email;
+    }
+
+    [Serializable] private class TokenResponse
+    {
+        public string access_token;
+        public int expires_in;
+    }
+
+    private static string cachedToken;
+    private static float tokenExpiry;
+    private static ServiceAccountKey cachedKey;
+
+    public static string ProjectId => cachedKey?.project_id ?? "";
+
+    public static void LoadServiceAccount(string jsonPath)
+    {
+        string json = System.IO.File.ReadAllText(jsonPath);
+        cachedKey = JsonConvert.DeserializeObject<ServiceAccountKey>(json);
+        Debug.Log($"[FirestoreAuth] Loaded service account: {cachedKey.client_email}");
+    }
+
+    public static bool HasValidToken => !string.IsNullOrEmpty(cachedToken) && Time.realtimeSinceStartup < tokenExpiry;
+
+    public static IEnumerator GetAccessToken(Action<string> callback)
+    {
+        if (HasValidToken) { callback?.Invoke(cachedToken); yield break; }
+        if (cachedKey == null) { Debug.LogError("[FirestoreAuth] Service account not loaded!"); yield break; }
+
+        long now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+        string header = Base64UrlEncode(JsonConvert.SerializeObject(new { alg = "RS256", typ = "JWT" }));
+        string payload = Base64UrlEncode(JsonConvert.SerializeObject(new
+        {
+            iss = cachedKey.client_email,
+            scope = "https://www.googleapis.com/auth/datastore",
+            aud = "https://oauth2.googleapis.com/token",
+            iat = now,
+            exp = now + 3600
+        }));
+
+        string unsigned = header + "." + payload;
+        string signature = Base64UrlEncode(SignRS256(unsigned, cachedKey.private_key));
+        string jwt = unsigned + "." + signature;
+
+        string body = $"grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion={jwt}";
+        using (var req = new UnityWebRequest("https://oauth2.googleapis.com/token", "POST"))
+        {
+            req.uploadHandler = new UploadHandlerRaw(Encoding.UTF8.GetBytes(body));
+            req.downloadHandler = new DownloadHandlerBuffer();
+            req.SetRequestHeader("Content-Type", "application/x-www-form-urlencoded");
+            yield return req.SendWebRequest();
+
+            if (req.result == UnityWebRequest.Result.Success)
+            {
+                var resp = JsonConvert.DeserializeObject<TokenResponse>(req.downloadHandler.text);
+                cachedToken = resp.access_token;
+                tokenExpiry = Time.realtimeSinceStartup + resp.expires_in - 60;
+                callback?.Invoke(cachedToken);
+            }
+            else
+            {
+                Debug.LogError($"[FirestoreAuth] Token error: {req.error}\n{req.downloadHandler.text}");
+                callback?.Invoke(null);
+            }
+        }
+    }
+
+    private static string Base64UrlEncode(string input) => Base64UrlEncode(Encoding.UTF8.GetBytes(input));
+    private static string Base64UrlEncode(byte[] input) =>
+        Convert.ToBase64String(input).Replace("+", "-").Replace("/", "_").TrimEnd('=');
+
+    private static byte[] SignRS256(string data, string privateKeyPem)
+    {
+        string pemClean = privateKeyPem
+            .Replace("-----BEGIN PRIVATE KEY-----", "")
+            .Replace("-----END PRIVATE KEY-----", "")
+            .Replace("\\n", "").Replace("\n", "").Replace("\r", "").Trim();
+        byte[] pkcs8 = Convert.FromBase64String(pemClean);
+
+        // Manually parse PKCS#8 DER to extract RSA parameters (Mono-compatible)
+        var rsaParams = DecodePkcs8RsaPrivateKey(pkcs8);
+
+        using (var rsa = new System.Security.Cryptography.RSACryptoServiceProvider())
+        {
+            rsa.ImportParameters(rsaParams);
+            return rsa.SignData(Encoding.UTF8.GetBytes(data), "SHA256");
+        }
+    }
+
+    /// <summary>
+    /// Parse PKCS#8 DER-encoded private key and extract RSA parameters.
+    /// Compatible with Unity Mono runtime (no ImportPkcs8PrivateKey needed).
+    /// 
+    /// PKCS#8 structure:
+    ///   SEQUENCE {
+    ///     INTEGER (version)
+    ///     SEQUENCE { OID, NULL }    -- algorithm identifier
+    ///     OCTET STRING {            -- wraps the RSA private key
+    ///       SEQUENCE {
+    ///         INTEGER version
+    ///         INTEGER modulus
+    ///         INTEGER publicExponent
+    ///         INTEGER privateExponent
+    ///         INTEGER prime1
+    ///         INTEGER prime2
+    ///         INTEGER exponent1
+    ///         INTEGER exponent2
+    ///         INTEGER coefficient
+    ///       }
+    ///     }
+    ///   }
+    /// </summary>
+    private static System.Security.Cryptography.RSAParameters DecodePkcs8RsaPrivateKey(byte[] pkcs8)
+    {
+        // Wrap in a MemoryStream for sequential reading
+        using (var mem = new System.IO.MemoryStream(pkcs8))
+        using (var reader = new System.IO.BinaryReader(mem))
+        {
+            // Read outer SEQUENCE
+            ReadTag(reader, 0x30);
+            ReadLength(reader);
+
+            // Read version INTEGER
+            ReadTag(reader, 0x02);
+            int vLen = ReadLength(reader);
+            reader.ReadBytes(vLen);
+
+            // Read algorithm identifier SEQUENCE
+            ReadTag(reader, 0x30);
+            int algLen = ReadLength(reader);
+            reader.ReadBytes(algLen);
+
+            // Read OCTET STRING containing RSA private key
+            ReadTag(reader, 0x04);
+            ReadLength(reader);
+
+            // Now parse RSA private key SEQUENCE
+            ReadTag(reader, 0x30);
+            ReadLength(reader);
+
+            // Version
+            ReadTag(reader, 0x02);
+            int rsaVerLen = ReadLength(reader);
+            reader.ReadBytes(rsaVerLen);
+
+            // Read RSA parameters
+            byte[] modulus = ReadIntegerBytes(reader);
+            byte[] publicExponent = ReadIntegerBytes(reader);
+            byte[] privateExponent = ReadIntegerBytes(reader);
+            byte[] prime1 = ReadIntegerBytes(reader);
+            byte[] prime2 = ReadIntegerBytes(reader);
+            byte[] exponent1 = ReadIntegerBytes(reader);
+            byte[] exponent2 = ReadIntegerBytes(reader);
+            byte[] coefficient = ReadIntegerBytes(reader);
+
+            return new System.Security.Cryptography.RSAParameters
+            {
+                Modulus = modulus,
+                Exponent = publicExponent,
+                D = privateExponent,
+                P = prime1,
+                Q = prime2,
+                DP = exponent1,
+                DQ = exponent2,
+                InverseQ = coefficient
+            };
+        }
+    }
+
+    private static void ReadTag(System.IO.BinaryReader reader, byte expected)
+    {
+        byte tag = reader.ReadByte();
+        if (tag != expected)
+            throw new Exception($"[FirestoreAuth] Expected ASN.1 tag 0x{expected:X2}, got 0x{tag:X2}");
+    }
+
+    private static int ReadLength(System.IO.BinaryReader reader)
+    {
+        byte b = reader.ReadByte();
+        if (b < 0x80) return b;
+        int numBytes = b & 0x7F;
+        int length = 0;
+        for (int i = 0; i < numBytes; i++)
+            length = (length << 8) | reader.ReadByte();
+        return length;
+    }
+
+    /// <summary>Read ASN.1 INTEGER, strip leading zero padding.</summary>
+    private static byte[] ReadIntegerBytes(System.IO.BinaryReader reader)
+    {
+        ReadTag(reader, 0x02);
+        int len = ReadLength(reader);
+        byte[] data = reader.ReadBytes(len);
+
+        // ASN.1 integers may have a leading 0x00 byte for sign; strip it for RSA
+        if (data.Length > 1 && data[0] == 0x00)
+        {
+            byte[] trimmed = new byte[data.Length - 1];
+            Array.Copy(data, 1, trimmed, 0, trimmed.Length);
+            return trimmed;
+        }
+        return data;
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  DATABASE MANAGER — FIRESTORE REST API
+// ═══════════════════════════════════════════════════════════════════
+
+/// <summary>
+/// Manages communication with Cloud Firestore via REST API.
+/// Supports multiple buoy location collections.
 /// </summary>
 public class DatabaseManager : MonoBehaviour
 {
-    // ─── Configuration ───────────────────────────────────────────────
-    private const string DATABASE_URL =
-        "https://ocean-waves-ef108-default-rtdb.asia-southeast1.firebasedatabase.app/";
+    [Header("Firestore Settings")]
+    [Tooltip("Path to serviceAccountKey.json (relative to Assets)")]
+    [SerializeField] private string serviceAccountKeyPath = "Assets/Ocean Waves/fft/Database/serviceAccountKey.json";
+
+    [Tooltip("Daftar collection (lokasi buoy) dari Firestore")]
+    [SerializeField] private List<string> collectionList = new List<string>();
+
+    [Tooltip("Index collection yang dipilih")]
+    [SerializeField] private int selectedCollectionIndex = 0;
 
     [Header("Settings")]
-    [Tooltip("Automatically fetch all data on Start")]
     [SerializeField] private bool fetchOnStart = true;
-
-    [Tooltip("Auto-refresh interval in seconds (0 = disabled)")]
     [SerializeField] private float autoRefreshInterval = 0f;
 
-    // ─── Realtime Test Display ────────────────────────────────────────
     [Header("Realtime Test Display")]
-    [Tooltip("Enable on-screen debug overlay")]
-    [SerializeField] private bool showDebugOverlay = true;
-
-    [Tooltip("Date to query (yyyy-MM-dd)")]
-    [SerializeField] private string queryDate = "2026-04-18";
-
-    [Tooltip("Hour to query (0-23)")]
+    [SerializeField] private string queryDate = "2026-05-06";
     [Range(0, 23)]
-    [SerializeField] private int queryHour = 0;
-
-    [Tooltip("Auto-refresh test display interval in seconds (0 = manual only)")]
+    [SerializeField] private int queryHour = 7;
     [SerializeField] private float testRefreshInterval = 5f;
 
-    [Header("Current Data (Read-Only)")]
+    [Header("Status (Read-Only)")]
     [SerializeField] private string currentKey = "—";
     [SerializeField] private string status = "Idle";
-    [Space(5)]
-    [SerializeField] private float display_WVHT;
-    [SerializeField] private float display_WSPD;
-    [SerializeField] private int display_WDIR;
-    [SerializeField] private int display_MWD;
-    [SerializeField] private float display_APD;
-    [SerializeField] private int display_DPD;
-    [SerializeField] private float display_GST;
-    [SerializeField] private float display_PRES;
-    [SerializeField] private float display_ATMP;
-    [SerializeField] private float display_WTMP;
-    [SerializeField] private float display_DEWP;
 
-    // Internal state for test display
-    private BuoyData currentDisplayData;
-    private string lastQueryKey = "";
     private Coroutine testRefreshCoroutine;
 
-    // ─── Events ──────────────────────────────────────────────────────
-    /// <summary>Fired when all data is received from Firebase.</summary>
+    // ─── Events ──────────────────────────────────────────────────
     public event Action<Dictionary<string, BuoyData>> OnAllDataReceived;
-
-    /// <summary>Fired when a single entry is received.</summary>
     public event Action<string, BuoyData> OnSingleDataReceived;
-
-    /// <summary>Fired when data is successfully sent to Firebase.</summary>
-    public event Action<string, BuoyData> OnDataSent;
-
-    /// <summary>Fired when data is successfully deleted.</summary>
-    public event Action<string> OnDataDeleted;
-
-    /// <summary>Fired on any Firebase operation error.</summary>
     public event Action<string> OnError;
 
-    // ─── Singleton ───────────────────────────────────────────────────
+    // ─── Singleton ───────────────────────────────────────────────
     public static DatabaseManager Instance { get; private set; }
-
-    // ─── Cached Data ─────────────────────────────────────────────────
-    /// <summary>Locally cached copy of all Firebase data.</summary>
-    public Dictionary<string, BuoyData> CachedData { get; private set; }
-        = new Dictionary<string, BuoyData>();
-
-    /// <summary>True while any Firebase operation is in progress.</summary>
+    public Dictionary<string, BuoyData> CachedData { get; private set; } = new Dictionary<string, BuoyData>();
     public bool IsLoading { get; private set; }
 
-    // ─── Lifecycle ───────────────────────────────────────────────────
+    /// <summary>Nama collection yang sedang aktif.</summary>
+    public string CurrentCollection => (collectionList != null && collectionList.Count > 0 && selectedCollectionIndex >= 0 && selectedCollectionIndex < collectionList.Count)
+        ? collectionList[selectedCollectionIndex] : "";
+
+    /// <summary>List of available collection names (buoy locations).</summary>
+    public List<string> CollectionList => collectionList;
+    public int SelectedCollectionIndex { get => selectedCollectionIndex; set => selectedCollectionIndex = value; }
+
+    private string FirestoreBaseUrl => $"https://firestore.googleapis.com/v1/projects/{FirestoreAuth.ProjectId}/databases/(default)/documents";
+
+    // ─── Lifecycle ───────────────────────────────────────────────
     private void Awake()
     {
-        if (Instance == null)
-        {
-            Instance = this;
-        }
-        else
-        {
-            Destroy(gameObject);
-            return;
-        }
+        if (Instance == null) Instance = this;
+        else { Destroy(gameObject); return; }
+
+        string fullPath = System.IO.Path.Combine(Application.dataPath, "..",  serviceAccountKeyPath);
+        FirestoreAuth.LoadServiceAccount(fullPath);
     }
 
     private void Start()
     {
-        if (fetchOnStart)
-        {
-            FetchAllData();
-        }
-
-        if (autoRefreshInterval > 0)
-        {
-            StartCoroutine(AutoRefreshCoroutine());
-        }
-
-        // Start test display auto-refresh
-        if (testRefreshInterval > 0)
-        {
-            testRefreshCoroutine = StartCoroutine(TestRefreshCoroutine());
-        }
+        // Fetch daftar collection dulu, lalu fetch data
+        StartCoroutine(InitializeCoroutine());
     }
 
-    private void OnValidate()
+    private IEnumerator InitializeCoroutine()
     {
-        // Clamp hour
-        queryHour = Mathf.Clamp(queryHour, 0, 23);
+        // Fetch collection list dari Firestore
+        yield return FetchCollectionsCoroutine();
+
+        if (fetchOnStart && !string.IsNullOrEmpty(CurrentCollection))
+            FetchAllData();
+        if (autoRefreshInterval > 0) StartCoroutine(AutoRefreshCoroutine());
+        if (testRefreshInterval > 0) testRefreshCoroutine = StartCoroutine(TestRefreshCoroutine());
     }
+
+    private void OnValidate() { queryHour = Mathf.Clamp(queryHour, 0, 23); }
 
     private IEnumerator AutoRefreshCoroutine()
     {
-        while (true)
-        {
-            yield return new WaitForSeconds(autoRefreshInterval);
-            FetchAllData();
-        }
+        while (true) { yield return new WaitForSeconds(autoRefreshInterval); FetchAllData(); }
     }
 
     private IEnumerator TestRefreshCoroutine()
     {
-        while (true)
+        while (true) { FetchTestData(); yield return new WaitForSeconds(testRefreshInterval); }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  PUBLIC API — COLLECTION MANAGEMENT
+    // ═══════════════════════════════════════════════════════════════
+
+    /// <summary>Fetch daftar collection (lokasi buoy) dari Firestore.</summary>
+    [ContextMenu("Fetch Collections")]
+    public void FetchCollections()
+    {
+        StartCoroutine(FetchCollectionsCoroutine());
+    }
+
+    private IEnumerator FetchCollectionsCoroutine()
+    {
+        string token = null;
+        yield return FirestoreAuth.GetAccessToken(t => token = t);
+        if (token == null) yield break;
+
+        // Firestore REST: GET documents root returns list of documents.
+        // To list collections, use the listCollectionIds endpoint.
+        string url = $"https://firestore.googleapis.com/v1/projects/{FirestoreAuth.ProjectId}/databases/(default)/documents:listCollectionIds";
+        string body = JsonConvert.SerializeObject(new { pageSize = 100 });
+
+        using (var req = new UnityWebRequest(url, "POST"))
         {
-            FetchTestData();
-            yield return new WaitForSeconds(testRefreshInterval);
+            req.uploadHandler = new UploadHandlerRaw(Encoding.UTF8.GetBytes(body));
+            req.downloadHandler = new DownloadHandlerBuffer();
+            req.SetRequestHeader("Authorization", $"Bearer {token}");
+            req.SetRequestHeader("Content-Type", "application/json");
+            yield return req.SendWebRequest();
+
+            if (req.result == UnityWebRequest.Result.Success)
+            {
+                var root = JObject.Parse(req.downloadHandler.text);
+                var ids = root["collectionIds"] as JArray;
+                if (ids != null)
+                {
+                    collectionList.Clear();
+                    foreach (var id in ids)
+                        collectionList.Add(id.ToString());
+
+                    // Keep selectedCollectionIndex valid
+                    if (selectedCollectionIndex >= collectionList.Count)
+                        selectedCollectionIndex = 0;
+
+                    Debug.Log($"[DatabaseManager] Found {collectionList.Count} collections: {string.Join(", ", collectionList)}");
+                }
+            }
+            else
+            {
+                Debug.LogError($"[DatabaseManager] FetchCollections failed: {req.error}\n{req.downloadHandler?.text}");
+            }
         }
     }
 
-    // ═══════════════════════════════════════════════════════════════════
-    //  PUBLIC API — FETCH (GET)
-    // ═══════════════════════════════════════════════════════════════════
+    /// <summary>Ganti collection berdasarkan index.</summary>
+    public void SetCollectionByIndex(int index)
+    {
+        if (index >= 0 && index < collectionList.Count)
+        {
+            selectedCollectionIndex = index;
+            CachedData.Clear();
+            Debug.Log($"[DatabaseManager] Switched to collection: {CurrentCollection}");
+        }
+    }
 
-    /// <summary>
-    /// Fetch all buoy data from Firebase.
-    /// </summary>
+    /// <summary>Ganti collection berdasarkan nama.</summary>
+    public void SetCollection(string collectionName)
+    {
+        int idx = collectionList.IndexOf(collectionName);
+        if (idx >= 0)
+        {
+            SetCollectionByIndex(idx);
+        }
+        else
+        {
+            // Tambahkan jika belum ada
+            collectionList.Add(collectionName);
+            selectedCollectionIndex = collectionList.Count - 1;
+            CachedData.Clear();
+            Debug.Log($"[DatabaseManager] Added & switched to collection: {collectionName}");
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  PUBLIC API — FETCH
+    // ═══════════════════════════════════════════════════════════════
+
     public void FetchAllData(Action<Dictionary<string, BuoyData>> callback = null)
     {
-        StartCoroutine(GetRequestCoroutine(".json", json =>
-        {
-            if (string.IsNullOrEmpty(json) || json == "null")
-            {
-                Debug.LogWarning("[DatabaseManager] No data found in Firebase.");
-                var empty = new Dictionary<string, BuoyData>();
-                callback?.Invoke(empty);
-                OnAllDataReceived?.Invoke(empty);
-                return;
-            }
-
-            var data = JsonConvert.DeserializeObject<Dictionary<string, BuoyData>>(json);
-            CachedData = data ?? new Dictionary<string, BuoyData>();
-
-            Debug.Log($"[DatabaseManager] Fetched {CachedData.Count} entries from Firebase.");
-            callback?.Invoke(CachedData);
-            OnAllDataReceived?.Invoke(CachedData);
-        }));
+        StartCoroutine(FetchAllDataCoroutine(callback));
     }
 
-    /// <summary>
-    /// Fetch a single entry by key (e.g., "2026041800").
-    /// </summary>
+    private IEnumerator FetchAllDataCoroutine(Action<Dictionary<string, BuoyData>> callback)
+    {
+        IsLoading = true;
+        string token = null;
+        yield return FirestoreAuth.GetAccessToken(t => token = t);
+        if (token == null) { IsLoading = false; yield break; }
+
+        string url = $"{FirestoreBaseUrl}/{Uri.EscapeDataString(CurrentCollection)}";
+        using (var req = UnityWebRequest.Get(url))
+        {
+            req.SetRequestHeader("Authorization", $"Bearer {token}");
+            yield return req.SendWebRequest();
+
+            if (req.result == UnityWebRequest.Result.Success)
+            {
+                var data = ParseFirestoreList(req.downloadHandler.text);
+                CachedData = data;
+                Debug.Log($"[DatabaseManager] Fetched {data.Count} docs from '{CurrentCollection}'");
+                callback?.Invoke(data);
+                OnAllDataReceived?.Invoke(data);
+            }
+            else
+            {
+                HandleError($"FetchAll failed: {req.error}", req.downloadHandler?.text);
+            }
+        }
+        IsLoading = false;
+    }
+
     public void FetchDataByKey(string key, Action<BuoyData> callback = null)
     {
-        StartCoroutine(GetRequestCoroutine($"{key}.json", json =>
-        {
-            if (string.IsNullOrEmpty(json) || json == "null")
-            {
-                Debug.LogWarning($"[DatabaseManager] No data found for key: {key}");
-                callback?.Invoke(null);
-                return;
-            }
-
-            var data = JsonConvert.DeserializeObject<BuoyData>(json);
-            if (data != null)
-            {
-                CachedData[key] = data;
-            }
-
-            Debug.Log($"[DatabaseManager] Fetched entry: {key} → {data}");
-            callback?.Invoke(data);
-            OnSingleDataReceived?.Invoke(key, data);
-        }));
+        StartCoroutine(FetchByKeyCoroutine(key, callback));
     }
 
-    /// <summary>
-    /// Fetch the latest entry (highest key = most recent datetime).
-    /// </summary>
+    private IEnumerator FetchByKeyCoroutine(string key, Action<BuoyData> callback)
+    {
+        IsLoading = true;
+        string token = null;
+        yield return FirestoreAuth.GetAccessToken(t => token = t);
+        if (token == null) { IsLoading = false; yield break; }
+
+        string url = $"{FirestoreBaseUrl}/{Uri.EscapeDataString(CurrentCollection)}/{key}";
+        using (var req = UnityWebRequest.Get(url))
+        {
+            req.SetRequestHeader("Authorization", $"Bearer {token}");
+            yield return req.SendWebRequest();
+
+            if (req.result == UnityWebRequest.Result.Success)
+            {
+                var data = ParseFirestoreDocument(req.downloadHandler.text);
+                if (data != null) CachedData[key] = data;
+                Debug.Log($"[DatabaseManager] Fetched: {key} → {data}");
+                callback?.Invoke(data);
+                OnSingleDataReceived?.Invoke(key, data);
+            }
+            else
+            {
+                Debug.LogWarning($"[DatabaseManager] No data for key: {key}");
+                callback?.Invoke(null);
+            }
+        }
+        IsLoading = false;
+    }
+
     public void FetchLatestData(Action<string, BuoyData> callback = null)
     {
-        string query = ".json?orderBy=\"$key\"&limitToLast=1";
-        StartCoroutine(GetRequestCoroutine(query, json =>
+        StartCoroutine(FetchLatestCoroutine(callback));
+    }
+
+    private IEnumerator FetchLatestCoroutine(Action<string, BuoyData> callback)
+    {
+        IsLoading = true;
+        string token = null;
+        yield return FirestoreAuth.GetAccessToken(t => token = t);
+        if (token == null) { IsLoading = false; yield break; }
+
+        // Firestore structured query: order by timestamp desc, limit 1
+        string url = $"{FirestoreBaseUrl}:runQuery";
+        var query = new
         {
-            if (string.IsNullOrEmpty(json) || json == "null")
+            structuredQuery = new
             {
-                Debug.LogWarning("[DatabaseManager] No data found.");
+                from = new[] { new { collectionId = CurrentCollection } },
+                orderBy = new[] { new { field = new { fieldPath = "timestamp" }, direction = "DESCENDING" } },
+                limit = 1
+            }
+        };
+        string body = JsonConvert.SerializeObject(query);
+
+        using (var req = new UnityWebRequest(url, "POST"))
+        {
+            req.uploadHandler = new UploadHandlerRaw(Encoding.UTF8.GetBytes(body));
+            req.downloadHandler = new DownloadHandlerBuffer();
+            req.SetRequestHeader("Authorization", $"Bearer {token}");
+            req.SetRequestHeader("Content-Type", "application/json");
+            yield return req.SendWebRequest();
+
+            if (req.result == UnityWebRequest.Result.Success)
+            {
+                var results = JArray.Parse(req.downloadHandler.text);
+                if (results.Count > 0 && results[0]["document"] != null)
+                {
+                    var doc = results[0]["document"];
+                    string docName = doc["name"]?.ToString() ?? "";
+                    string docId = docName.Substring(docName.LastIndexOf('/') + 1);
+                    var data = ParseDocumentFields(doc);
+                    if (data != null) CachedData[docId] = data;
+                    Debug.Log($"[DatabaseManager] Latest: {docId} → {data}");
+                    callback?.Invoke(docId, data);
+                    OnSingleDataReceived?.Invoke(docId, data);
+                }
+                else
+                {
+                    callback?.Invoke(null, null);
+                }
+            }
+            else
+            {
+                HandleError($"FetchLatest failed: {req.error}", req.downloadHandler?.text);
                 callback?.Invoke(null, null);
-                return;
             }
-
-            var data = JsonConvert.DeserializeObject<Dictionary<string, BuoyData>>(json);
-            if (data != null)
-            {
-                foreach (var kvp in data)
-                {
-                    Debug.Log($"[DatabaseManager] Latest entry: {kvp.Key} → {kvp.Value}");
-                    callback?.Invoke(kvp.Key, kvp.Value);
-                    OnSingleDataReceived?.Invoke(kvp.Key, kvp.Value);
-                    break;
-                }
-            }
-        }));
+        }
+        IsLoading = false;
     }
 
-    /// <summary>
-    /// Fetch entries within a date range using key-based ordering.
-    /// Keys are formatted as "yyyyMMddHH", so lexicographic ordering works.
-    /// </summary>
-    /// <param name="startKey">Start key inclusive, e.g., "2026041800"</param>
-    /// <param name="endKey">End key inclusive, e.g., "2026041823"</param>
-    public void FetchDataByRange(string startKey, string endKey,
-        Action<Dictionary<string, BuoyData>> callback = null)
-    {
-        string query = $".json?orderBy=\"$key\"&startAt=\"{startKey}\"&endAt=\"{endKey}\"";
-        StartCoroutine(GetRequestCoroutine(query, json =>
-        {
-            if (string.IsNullOrEmpty(json) || json == "null")
-            {
-                Debug.LogWarning($"[DatabaseManager] No data in range {startKey}–{endKey}.");
-                callback?.Invoke(new Dictionary<string, BuoyData>());
-                return;
-            }
-
-            var data = JsonConvert.DeserializeObject<Dictionary<string, BuoyData>>(json);
-            Debug.Log($"[DatabaseManager] Fetched {data?.Count ?? 0} entries in range.");
-            callback?.Invoke(data ?? new Dictionary<string, BuoyData>());
-            OnAllDataReceived?.Invoke(data);
-        }));
-    }
-
-    // ═══════════════════════════════════════════════════════════════════
-    //  PUBLIC API — SEND (PUT / PATCH)
-    // ═══════════════════════════════════════════════════════════════════
-
-    /// <summary>
-    /// Send (overwrite) a single entry to Firebase.
-    /// </summary>
-    /// <param name="key">Entry key, e.g., "2026041800"</param>
-    /// <param name="data">The buoy data to store</param>
-    public void SendData(string key, BuoyData data, Action<bool> callback = null)
-    {
-        string json = JsonConvert.SerializeObject(data, Formatting.None);
-        StartCoroutine(PutRequestCoroutine($"{key}.json", json, success =>
-        {
-            if (success)
-            {
-                CachedData[key] = data;
-                Debug.Log($"[DatabaseManager] Sent data: {key} → {data}");
-                OnDataSent?.Invoke(key, data);
-            }
-            callback?.Invoke(success);
-        }));
-    }
-
-    /// <summary>
-    /// Send multiple entries at once (merges with existing data).
-    /// </summary>
-    public void SendMultipleData(Dictionary<string, BuoyData> entries,
-        Action<bool> callback = null)
-    {
-        string json = JsonConvert.SerializeObject(entries, Formatting.None);
-        StartCoroutine(PatchRequestCoroutine(".json", json, success =>
-        {
-            if (success)
-            {
-                foreach (var kvp in entries)
-                {
-                    CachedData[kvp.Key] = kvp.Value;
-                }
-                Debug.Log($"[DatabaseManager] Sent {entries.Count} entries to Firebase.");
-            }
-            callback?.Invoke(success);
-        }));
-    }
-
-    /// <summary>
-    /// Update specific fields of an existing entry.
-    /// </summary>
-    public void UpdateData(string key, Dictionary<string, object> fieldsToUpdate,
-        Action<bool> callback = null)
-    {
-        string json = JsonConvert.SerializeObject(fieldsToUpdate, Formatting.None);
-        StartCoroutine(PatchRequestCoroutine($"{key}.json", json, success =>
-        {
-            if (success)
-            {
-                Debug.Log($"[DatabaseManager] Updated fields for key: {key}");
-            }
-            callback?.Invoke(success);
-        }));
-    }
-
-    // ═══════════════════════════════════════════════════════════════════
-    //  PUBLIC API — DELETE
-    // ═══════════════════════════════════════════════════════════════════
-
-    /// <summary>
-    /// Delete a single entry from Firebase.
-    /// </summary>
-    public void DeleteData(string key, Action<bool> callback = null)
-    {
-        StartCoroutine(DeleteRequestCoroutine($"{key}.json", success =>
-        {
-            if (success)
-            {
-                CachedData.Remove(key);
-                Debug.Log($"[DatabaseManager] Deleted entry: {key}");
-                OnDataDeleted?.Invoke(key);
-            }
-            callback?.Invoke(success);
-        }));
-    }
-
-    /// <summary>
-    /// Delete ALL data from Firebase. Use with caution!
-    /// </summary>
-    public void DeleteAllData(Action<bool> callback = null)
-    {
-        StartCoroutine(DeleteRequestCoroutine(".json", success =>
-        {
-            if (success)
-            {
-                CachedData.Clear();
-                Debug.Log("[DatabaseManager] Deleted all data from Firebase.");
-            }
-            callback?.Invoke(success);
-        }));
-    }
-
-    // ═══════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════
     //  HELPER — Key Generation
-    // ═══════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════
 
-    /// <summary>
-    /// Generate a Firebase key from a DateTime. Format: "yyyyMMddHH"
-    /// </summary>
-    public static string GenerateKey(DateTime dateTime)
-    {
-        return dateTime.ToString("yyyyMMddHH");
-    }
-
-    /// <summary>
-    /// Generate a Firebase key from date and time strings.
-    /// e.g., ("2026-04-18", "01:00") → "2026041801"
-    /// </summary>
-    public static string GenerateKey(string date, string time)
-    {
-        return date.Replace("-", "") + time.Substring(0, 2);
-    }
-
-    /// <summary>
-    /// Parse a Firebase key back to date and time strings.
-    /// e.g., "2026041801" → ("2026-04-18", "01:00")
-    /// </summary>
+    public static string GenerateKey(DateTime dateTime) => dateTime.ToString("yyyyMMddHH");
+    public static string GenerateKey(string date, string time) => date.Replace("-", "") + time.Substring(0, 2);
     public static (string date, string time) ParseKey(string key)
     {
-        // key: "2026041801"
-        string year = key.Substring(0, 4);
-        string month = key.Substring(4, 2);
-        string day = key.Substring(6, 2);
-        string hour = key.Substring(8, 2);
-        return ($"{year}-{month}-{day}", $"{hour}:00");
+        string y = key.Substring(0, 4), m = key.Substring(4, 2), d = key.Substring(6, 2), h = key.Substring(8, 2);
+        return ($"{y}-{m}-{d}", $"{h}:00");
     }
 
-    // ═══════════════════════════════════════════════════════════════════
-    //  REALTIME TEST DISPLAY
-    // ═══════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════
+    //  TEST DATA FETCH
+    // ═══════════════════════════════════════════════════════════════
 
-    /// <summary>
-    /// Fetch data for the date/hour set in the Inspector.
-    /// Can be triggered via Inspector context menu: right-click → Fetch Test Data.
-    /// </summary>
     [ContextMenu("Fetch Test Data")]
     public void FetchTestData()
     {
         string key = queryDate.Replace("-", "") + queryHour.ToString("D2");
         currentKey = key;
         status = "Fetching...";
-
         FetchDataByKey(key, data =>
         {
             if (data != null)
             {
-                currentDisplayData = data;
-                UpdateDisplayFields(data);
-                status = $"OK — {data.date} {data.time}";
-                Debug.Log($"[DatabaseManager][Test] {key} → {data}");
+                status = $"OK — {data.loc_name} | {data.date} {data.time}";
             }
             else
             {
-                currentDisplayData = null;
-                ClearDisplayFields();
                 status = $"Not Found — key: {key}";
-                Debug.LogWarning($"[DatabaseManager][Test] No data for key: {key}");
             }
         });
     }
 
-    /// <summary>
-    /// Fetch data for the next hour (increments queryHour or rolls to next day).
-    /// </summary>
     [ContextMenu("Fetch Next Hour")]
     public void FetchNextHour()
     {
         queryHour++;
-        if (queryHour > 23)
-        {
-            queryHour = 0;
-            // Increment date
-            if (DateTime.TryParse(queryDate, out DateTime dt))
-            {
-                queryDate = dt.AddDays(1).ToString("yyyy-MM-dd");
-            }
-        }
+        if (queryHour > 23) { queryHour = 0; if (DateTime.TryParse(queryDate, out DateTime dt)) queryDate = dt.AddDays(1).ToString("yyyy-MM-dd"); }
         FetchTestData();
     }
 
-    /// <summary>
-    /// Fetch data for the previous hour (decrements queryHour or rolls to previous day).
-    /// </summary>
     [ContextMenu("Fetch Previous Hour")]
     public void FetchPreviousHour()
     {
         queryHour--;
-        if (queryHour < 0)
-        {
-            queryHour = 23;
-            if (DateTime.TryParse(queryDate, out DateTime dt))
-            {
-                queryDate = dt.AddDays(-1).ToString("yyyy-MM-dd");
-            }
-        }
+        if (queryHour < 0) { queryHour = 23; if (DateTime.TryParse(queryDate, out DateTime dt)) queryDate = dt.AddDays(-1).ToString("yyyy-MM-dd"); }
         FetchTestData();
     }
 
-    private void UpdateDisplayFields(BuoyData data)
+    // ═══════════════════════════════════════════════════════════════
+    //  FIRESTORE DOCUMENT PARSING
+    // ═══════════════════════════════════════════════════════════════
+
+    private Dictionary<string, BuoyData> ParseFirestoreList(string json)
     {
-        display_WVHT = data.WVHT;
-        display_WSPD = data.WSPD;
-        display_WDIR = data.WDIR;
-        display_MWD = data.MWD;
-        display_APD = data.APD;
-        display_DPD = data.DPD;
-        display_GST = data.GST;
-        display_PRES = data.PRES;
-        display_ATMP = data.ATMP;
-        display_WTMP = data.WTMP;
-        display_DEWP = data.DEWP;
-    }
+        var result = new Dictionary<string, BuoyData>();
+        var root = JObject.Parse(json);
+        var documents = root["documents"] as JArray;
+        if (documents == null) return result;
 
-    private void ClearDisplayFields()
-    {
-        display_WVHT = 0;
-        display_WSPD = 0;
-        display_WDIR = 0;
-        display_MWD = 0;
-        display_APD = 0;
-        display_DPD = 0;
-        display_GST = 0;
-        display_PRES = 0;
-        display_ATMP = 0;
-        display_WTMP = 0;
-        display_DEWP = 0;
-    }
-
-    // ─── On-Screen Debug Overlay ──────────────────────────────────────
-    private void OnGUI()
-    {
-        if (!showDebugOverlay) return;
-
-        float panelWidth = 340f;
-        float panelHeight = 320f;
-        float x = Screen.width - panelWidth - 15f;
-        float y = 15f;
-
-        // Semi-transparent background
-        GUI.color = new Color(0, 0, 0, 0.75f);
-        GUI.DrawTexture(new Rect(x, y, panelWidth, panelHeight), Texture2D.whiteTexture);
-        GUI.color = Color.white;
-
-        GUIStyle headerStyle = new GUIStyle(GUI.skin.label)
+        foreach (var doc in documents)
         {
-            fontSize = 14,
-            fontStyle = FontStyle.Bold,
-            normal = { textColor = new Color(0.3f, 0.85f, 1f) }
+            string name = doc["name"]?.ToString() ?? "";
+            string docId = name.Substring(name.LastIndexOf('/') + 1);
+            var data = ParseDocumentFields(doc);
+            if (data != null) result[docId] = data;
+        }
+        return result;
+    }
+
+    private BuoyData ParseFirestoreDocument(string json)
+    {
+        var doc = JObject.Parse(json);
+        return ParseDocumentFields(doc);
+    }
+
+    private BuoyData ParseDocumentFields(JToken doc)
+    {
+        var fields = doc["fields"];
+        if (fields == null) return null;
+
+        var data = new BuoyData
+        {
+            loc_name = GetStringValue(fields, "loc_name"),
+            date = GetStringValue(fields, "date"),
+            time = GetStringValue(fields, "time"),
+            WDIR = GetStringValue(fields, "WDIR"),
+            CDIR = GetStringValue(fields, "CDIR"),
+            WVHT = (float)GetDoubleValue(fields, "WVHT"),
+            CSPD = (float)GetDoubleValue(fields, "CSPD"),
+            TEMP = (float)GetDoubleValue(fields, "TEMP"),
+            HUMID = (float)GetDoubleValue(fields, "HUMID"),
+            WSPD = (int)GetDoubleValue(fields, "WSPD"),
+            GST = (int)GetDoubleValue(fields, "GST"),
         };
 
-        GUIStyle labelStyle = new GUIStyle(GUI.skin.label)
+        // Parse GeoPoint
+        var posisiField = fields["posisi"];
+        if (posisiField != null && posisiField["geoPointValue"] != null)
         {
-            fontSize = 12,
-            normal = { textColor = Color.white }
-        };
-
-        GUIStyle valueStyle = new GUIStyle(GUI.skin.label)
-        {
-            fontSize = 12,
-            fontStyle = FontStyle.Bold,
-            normal = { textColor = new Color(1f, 0.95f, 0.4f) }
-        };
-
-        GUIStyle statusStyle = new GUIStyle(GUI.skin.label)
-        {
-            fontSize = 11,
-            normal = { textColor = IsLoading ? Color.yellow : new Color(0.4f, 1f, 0.4f) }
-        };
-
-        float lineH = 20f;
-        float cx = x + 12f;
-        float cy = y + 8f;
-
-        GUI.Label(new Rect(cx, cy, panelWidth, lineH), "Drifting Buoy Data", headerStyle);
-        cy += lineH + 2f;
-
-        GUI.Label(new Rect(cx, cy, panelWidth, lineH), $"Key: {currentKey}   |   {status}", statusStyle);
-        cy += lineH + 6f;
-
-        if (currentDisplayData != null)
-        {
-            DrawDataRow(ref cy, cx, lineH, labelStyle, valueStyle, "Wave Height (WVHT)", $"{display_WVHT:F2} m");
-            DrawDataRow(ref cy, cx, lineH, labelStyle, valueStyle, "Wind Speed  (WSPD)", $"{display_WSPD:F1} m/s");
-            DrawDataRow(ref cy, cx, lineH, labelStyle, valueStyle, "Wind Dir    (WDIR)", $"{display_WDIR}°");
-            DrawDataRow(ref cy, cx, lineH, labelStyle, valueStyle, "Mean Wave Dir (MWD)", $"{display_MWD}°");
-            DrawDataRow(ref cy, cx, lineH, labelStyle, valueStyle, "Avg Period  (APD)", $"{display_APD:F1} s");
-            DrawDataRow(ref cy, cx, lineH, labelStyle, valueStyle, "Dom Period  (DPD)", $"{display_DPD} s");
-            DrawDataRow(ref cy, cx, lineH, labelStyle, valueStyle, "Gust Speed  (GST)", $"{display_GST:F1} m/s");
-            DrawDataRow(ref cy, cx, lineH, labelStyle, valueStyle, "Pressure   (PRES)", $"{display_PRES:F1} hPa");
-            DrawDataRow(ref cy, cx, lineH, labelStyle, valueStyle, "Air Temp   (ATMP)", $"{display_ATMP:F1} °C");
-            DrawDataRow(ref cy, cx, lineH, labelStyle, valueStyle, "Water Temp (WTMP)", $"{display_WTMP:F1} °C");
-            DrawDataRow(ref cy, cx, lineH, labelStyle, valueStyle, "Dewpoint   (DEWP)", $"{display_DEWP:F1} °C");
+            var geo = posisiField["geoPointValue"];
+            data.posisi = new GeoPoint
+            {
+                latitude = geo["latitude"]?.Value<double>() ?? 0,
+                longitude = geo["longitude"]?.Value<double>() ?? 0
+            };
         }
-        else
-        {
-            GUI.Label(new Rect(cx, cy, panelWidth, lineH), IsLoading ? "Loading..." : "No data. Set date/hour in Inspector.", labelStyle);
-        }
+
+        // Parse timestamp
+        var tsField = fields["timestamp"];
+        if (tsField != null && tsField["timestampValue"] != null)
+            data.timestamp = tsField["timestampValue"].ToString();
+
+        return data;
     }
 
-    private void DrawDataRow(ref float cy, float cx, float lineH,
-        GUIStyle labelStyle, GUIStyle valueStyle, string label, string value)
+    private string GetStringValue(JToken fields, string key)
     {
-        GUI.Label(new Rect(cx, cy, 180f, lineH), label, labelStyle);
-        GUI.Label(new Rect(cx + 185f, cy, 140f, lineH), value, valueStyle);
-        cy += lineH;
+        var f = fields[key];
+        if (f == null) return "";
+        return f["stringValue"]?.ToString() ?? "";
     }
 
-    // ═══════════════════════════════════════════════════════════════════
-    //  INTERNAL — HTTP Request Coroutines
-    // ═══════════════════════════════════════════════════════════════════
-
-    private IEnumerator GetRequestCoroutine(string endpoint, Action<string> onSuccess)
+    private double GetDoubleValue(JToken fields, string key)
     {
-        IsLoading = true;
-        string url = DATABASE_URL + endpoint;
-
-        using (UnityWebRequest request = UnityWebRequest.Get(url))
-        {
-            yield return request.SendWebRequest();
-
-            if (request.result == UnityWebRequest.Result.Success)
-            {
-                onSuccess?.Invoke(request.downloadHandler.text);
-            }
-            else
-            {
-                string error = $"GET {endpoint} failed: {request.error}";
-                Debug.LogError($"[DatabaseManager] {error}");
-                OnError?.Invoke(error);
-            }
-        }
-
-        IsLoading = false;
+        var f = fields[key];
+        if (f == null) return 0;
+        if (f["doubleValue"] != null) return f["doubleValue"].Value<double>();
+        if (f["integerValue"] != null) return f["integerValue"].Value<double>();
+        return 0;
     }
 
-    private IEnumerator PutRequestCoroutine(string endpoint, string jsonData,
-        Action<bool> onComplete)
+    private void HandleError(string msg, string responseBody)
     {
-        IsLoading = true;
-        string url = DATABASE_URL + endpoint;
-        byte[] bodyRaw = Encoding.UTF8.GetBytes(jsonData);
-
-        using (UnityWebRequest request = new UnityWebRequest(url, "PUT"))
-        {
-            request.uploadHandler = new UploadHandlerRaw(bodyRaw);
-            request.downloadHandler = new DownloadHandlerBuffer();
-            request.SetRequestHeader("Content-Type", "application/json");
-
-            yield return request.SendWebRequest();
-
-            bool success = request.result == UnityWebRequest.Result.Success;
-            if (!success)
-            {
-                string error = $"PUT {endpoint} failed: {request.error}";
-                Debug.LogError($"[DatabaseManager] {error}");
-                OnError?.Invoke(error);
-            }
-            onComplete?.Invoke(success);
-        }
-
-        IsLoading = false;
-    }
-
-    private IEnumerator PatchRequestCoroutine(string endpoint, string jsonData,
-        Action<bool> onComplete)
-    {
-        IsLoading = true;
-        string url = DATABASE_URL + endpoint;
-        byte[] bodyRaw = Encoding.UTF8.GetBytes(jsonData);
-
-        using (UnityWebRequest request = new UnityWebRequest(url, "PATCH"))
-        {
-            request.uploadHandler = new UploadHandlerRaw(bodyRaw);
-            request.downloadHandler = new DownloadHandlerBuffer();
-            request.SetRequestHeader("Content-Type", "application/json");
-
-            yield return request.SendWebRequest();
-
-            bool success = request.result == UnityWebRequest.Result.Success;
-            if (!success)
-            {
-                string error = $"PATCH {endpoint} failed: {request.error}";
-                Debug.LogError($"[DatabaseManager] {error}");
-                OnError?.Invoke(error);
-            }
-            onComplete?.Invoke(success);
-        }
-
-        IsLoading = false;
-    }
-
-    private IEnumerator DeleteRequestCoroutine(string endpoint, Action<bool> onComplete)
-    {
-        IsLoading = true;
-        string url = DATABASE_URL + endpoint;
-
-        using (UnityWebRequest request = UnityWebRequest.Delete(url))
-        {
-            yield return request.SendWebRequest();
-
-            bool success = request.result == UnityWebRequest.Result.Success;
-            if (!success)
-            {
-                string error = $"DELETE {endpoint} failed: {request.error}";
-                Debug.LogError($"[DatabaseManager] {error}");
-                OnError?.Invoke(error);
-            }
-            onComplete?.Invoke(success);
-        }
-
-        IsLoading = false;
+        Debug.LogError($"[DatabaseManager] {msg}\n{responseBody}");
+        OnError?.Invoke(msg);
     }
 }

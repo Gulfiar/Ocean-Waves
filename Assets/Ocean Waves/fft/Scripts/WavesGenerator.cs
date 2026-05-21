@@ -1,4 +1,4 @@
-﻿using UnityEditor;
+using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
 
@@ -36,6 +36,9 @@ public class WavesGenerator : MonoBehaviour
     FastFourierTransform fft;
     Texture2D physicsReadback;
 
+    // Change detection: cached hash of previous settings
+    int prevSettingsHash;
+
     private void Awake()
     {
         Application.targetFrameRate = -1;
@@ -47,6 +50,7 @@ public class WavesGenerator : MonoBehaviour
         cascade2 = new WavesCascade(size, initialSpectrumShader, timeDependentSpectrumShader, texturesMergerShader, fft, gaussianNoise);
 
         InitialiseCascades();
+        prevSettingsHash = GetSettingsHash();
 
         physicsReadback = new Texture2D(size, size, TextureFormat.RGBAFloat, false);
     }
@@ -64,11 +68,50 @@ public class WavesGenerator : MonoBehaviour
         Shader.SetGlobalFloat("LengthScale2", lengthScale2);
     }
 
+    /// <summary>
+    /// Computes a hash of all wave settings parameters to detect changes in the Inspector.
+    /// </summary>
+    int GetSettingsHash()
+    {
+        if (wavesSettings == null) return 0;
+
+        unchecked
+        {
+            int hash = 17;
+            hash = hash * 31 + wavesSettings.g.GetHashCode();
+            hash = hash * 31 + wavesSettings.depth.GetHashCode();
+            hash = hash * 31 + wavesSettings.lambda.GetHashCode();
+            hash = hash * 31 + wavesSettings.local.scale.GetHashCode();
+            hash = hash * 31 + wavesSettings.local.windSpeed.GetHashCode();
+            hash = hash * 31 + wavesSettings.local.windDirection.GetHashCode();
+            hash = hash * 31 + wavesSettings.local.fetch.GetHashCode();
+            hash = hash * 31 + wavesSettings.local.spreadBlend.GetHashCode();
+            hash = hash * 31 + wavesSettings.local.swell.GetHashCode();
+            hash = hash * 31 + wavesSettings.local.peakEnhancement.GetHashCode();
+            hash = hash * 31 + wavesSettings.local.shortWavesFade.GetHashCode();
+            hash = hash * 31 + wavesSettings.swell.scale.GetHashCode();
+            hash = hash * 31 + wavesSettings.swell.windSpeed.GetHashCode();
+            hash = hash * 31 + wavesSettings.swell.windDirection.GetHashCode();
+            hash = hash * 31 + wavesSettings.swell.fetch.GetHashCode();
+            hash = hash * 31 + wavesSettings.swell.spreadBlend.GetHashCode();
+            hash = hash * 31 + wavesSettings.swell.swell.GetHashCode();
+            hash = hash * 31 + wavesSettings.swell.peakEnhancement.GetHashCode();
+            hash = hash * 31 + wavesSettings.swell.shortWavesFade.GetHashCode();
+            hash = hash * 31 + lengthScale0.GetHashCode();
+            hash = hash * 31 + lengthScale1.GetHashCode();
+            hash = hash * 31 + lengthScale2.GetHashCode();
+            return hash;
+        }
+    }
+
     private void Update()
     {
-        if (alwaysRecalculateInitials)
+        // Detect if any wave settings were changed in the Inspector
+        int currentHash = GetSettingsHash();
+        if (alwaysRecalculateInitials || currentHash != prevSettingsHash)
         {
             InitialiseCascades();
+            prevSettingsHash = currentHash;
         }
 
         cascade0.CalculateWavesAtTime(Time.time);

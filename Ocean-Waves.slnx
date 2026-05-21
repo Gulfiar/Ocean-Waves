@@ -1,6 +1,4 @@
 ﻿<Solution>
-  <Project Path="Crest.csproj" />
-  <Project Path="Crest.Examples.csproj" />
-  <Project Path="Crest.Helpers.Editor.csproj" />
   <Project Path="Assembly-CSharp.csproj" />
+  <Project Path="Assembly-CSharp-Editor.csproj" />
 </Solution>
