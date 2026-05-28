@@ -42,8 +42,9 @@ public class BuoyDataOverlayUI : MonoBehaviour
     private int lastDataHash;
 
     // ─── Styles (lazy init) ──────────────────────────────────────
-    private GUIStyle headerStyle, statusStyle, labelStyle, valueStyle, arrowStyle, graphInfoStyle;
+    private GUIStyle headerStyle, statusStyle, labelStyle, valueStyle, arrowStyle, graphInfoStyle, tooltipStyle, minimizeBtnStyle;
     private bool stylesInit;
+    private bool minimized = false;
 
     private void Start()
     {
@@ -108,12 +109,25 @@ public class BuoyDataOverlayUI : MonoBehaviour
         if (!showOverlay || databaseManager == null) return;
         InitStyles();
 
+        if (minimized)
+        {
+            DrawMinimized();
+            return;
+        }
+
         var cached = databaseManager.CachedData;
         BuoyData current = null;
         if (cached != null && cached.Count > 0)
-            current = cached.OrderBy(k => k.Key).Last().Value;
+        {
+            // Prioritaskan ActiveKey (key yang terakhir di-fetch/dipilih user)
+            string activeKey = databaseManager.ActiveKey;
+            if (!string.IsNullOrEmpty(activeKey) && cached.ContainsKey(activeKey))
+                current = cached[activeKey];
+            else
+                current = cached.OrderBy(k => k.Key).Last().Value;
+        }
 
-        // ─── Calculate panel height ──────────────────────────────
+        // ─── Calculate panel height ──────────────────────
         float lh = 22f;
         float ph = 76f; // header + status + collection
         if (current != null)
@@ -133,20 +147,25 @@ public class BuoyDataOverlayUI : MonoBehaviour
         float x = Screen.width - panelWidth - 15f;
         float y = 15f;
 
-        // ─── Panel background ────────────────────────────────────
+        // ─── Panel background ────────────────────────
         GUI.color = new Color(0.04f, 0.04f, 0.08f, 0.88f);
         GUI.DrawTexture(new Rect(x, y, panelWidth, ph), Texture2D.whiteTexture);
         GUI.color = Color.white;
 
-        // ─── Border ──────────────────────────────────────────────
+        // ─── Border ──────────────────────────────────
         DrawBorder(new Rect(x, y, panelWidth, ph), new Color(0.2f, 0.5f, 0.8f, 0.5f));
 
         float cx = x + 14f;
         float cy = y + 10f;
 
-        // ─── Header ──────────────────────────────────────────────
+        // ─── Header ──────────────────────────────────
         string locName = current?.loc_name ?? databaseManager.CurrentCollection;
-        GUI.Label(new Rect(cx, cy, panelWidth - 28f, lh), $"{locName.ToUpper()}", headerStyle);
+        GUI.Label(new Rect(cx, cy, panelWidth - 60f, lh), $"{locName.ToUpper()}", headerStyle);
+
+        // Minimize button
+        if (GUI.Button(new Rect(x + panelWidth - 38f, cy - 2f, 28f, 24f), "─", minimizeBtnStyle))
+            minimized = true;
+
         cy += lh + 2f;
 
         // Status line
@@ -164,7 +183,7 @@ public class BuoyDataOverlayUI : MonoBehaviour
             cy += 18f;
         }
 
-        // ─── Separator line ──────────────────────────────────────
+        // ─── Separator line ──────────────────────────
         GUI.color = new Color(0.3f, 0.5f, 0.8f, 0.4f);
         GUI.DrawTexture(new Rect(cx, cy, panelWidth - 32f, 1f), Texture2D.whiteTexture);
         GUI.color = Color.white;
@@ -176,12 +195,47 @@ public class BuoyDataOverlayUI : MonoBehaviour
             return;
         }
 
-        // ─── Parameter rows ──────────────────────────────────────
+        // ─── Parameter rows ──────────────────────────
         for (int i = 0; i < paramDefs.Count; i++)
         {
             var p = paramDefs[i];
             DrawParameterRow(ref cy, x, cx, lh, panelWidth, p, current, i, cached);
         }
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  MINIMIZED VIEW
+    // ═══════════════════════════════════════════════════════════════
+
+    private void DrawMinimized()
+    {
+        float minW = 220f;
+        float minH = 32f;
+        float x = Screen.width - minW - 15f;
+        float y = 15f;
+
+        Rect minRect = new Rect(x, y, minW, minH);
+        GUI.color = new Color(0.04f, 0.04f, 0.08f, 0.88f);
+        GUI.DrawTexture(minRect, Texture2D.whiteTexture);
+        GUI.color = Color.white;
+        DrawBorder(minRect, new Color(0.2f, 0.5f, 0.8f, 0.5f));
+
+        // Get current location name
+        var cached = databaseManager.CachedData;
+        string locName = databaseManager.CurrentCollection;
+        if (cached != null && cached.Count > 0)
+        {
+            string activeKey = databaseManager.ActiveKey;
+            if (!string.IsNullOrEmpty(activeKey) && cached.ContainsKey(activeKey))
+                locName = cached[activeKey].loc_name ?? locName;
+        }
+
+        GUI.Label(new Rect(x + 10f, y + 4f, minW - 44f, minH - 8f),
+            $"🌊 {locName.ToUpper()}", headerStyle);
+
+        // Expand button
+        if (GUI.Button(new Rect(x + minW - 32f, y + 4f, 24f, 24f), "□", minimizeBtnStyle))
+            minimized = false;
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -288,6 +342,63 @@ public class BuoyDataOverlayUI : MonoBehaviour
         GUI.Label(new Rect(gx + 4f, cy + gh - 14f, 110f, 14f), $"min: {minV:F1}", graphInfoStyle);
         graphInfoStyle.alignment = TextAnchor.UpperRight;
         GUI.Label(new Rect(gx + gw - 114f, cy + 2f, 110f, 14f), $"avg: {avgV:F1}", graphInfoStyle);
+
+        // ─── Hover tooltip ────────────────────────────────────────
+        Rect graphRect = new Rect(gx, cy, gw, gh);
+        Vector2 mouse = Event.current.mousePosition;
+        if (graphRect.Contains(mouse) && values.Length >= 2)
+        {
+            // Find nearest data point based on mouse X position
+            float relX = (mouse.x - gx) / gw;
+            int nearestIdx = Mathf.Clamp(Mathf.RoundToInt(relX * (values.Length - 1)), 0, values.Length - 1);
+
+            float dotX = gx + (float)nearestIdx / (values.Length - 1) * gw;
+            float range = maxV - minV;
+            if (range < 0.001f) range = 1f;
+            float pad = 6f;
+            float graphH = gh - pad * 2;
+            float dotY = cy + gh - pad - ((values[nearestIdx] - minV) / range) * graphH;
+
+            // Vertical guide line
+            GUI.color = new Color(1f, 1f, 1f, 0.2f);
+            GUI.DrawTexture(new Rect(dotX, cy, 1f, gh), Texture2D.whiteTexture);
+            GUI.color = Color.white;
+
+            // Highlight dot
+            float dotR = 4f;
+            GUI.color = Color.white;
+            GUI.DrawTexture(new Rect(dotX - dotR, dotY - dotR, dotR * 2, dotR * 2), Texture2D.whiteTexture);
+            GUI.color = Color.white;
+
+            // Tooltip box
+            string tooltipText = $"{timeLabels[nearestIdx]}  ─  {param.formatter(sorted[nearestIdx].Value)}";
+            Vector2 tooltipSize = tooltipStyle.CalcSize(new GUIContent(tooltipText));
+            tooltipSize.x += 12f;
+            tooltipSize.y += 6f;
+
+            // Position tooltip — flip side if near edge
+            float ttX = dotX + 8f;
+            float ttY = dotY - tooltipSize.y - 4f;
+            if (ttX + tooltipSize.x > gx + gw)
+                ttX = dotX - tooltipSize.x - 8f;
+            if (ttY < cy)
+                ttY = dotY + 8f;
+
+            // Tooltip background
+            Rect ttRect = new Rect(ttX, ttY, tooltipSize.x, tooltipSize.y);
+            GUI.color = new Color(0.08f, 0.08f, 0.14f, 0.95f);
+            GUI.DrawTexture(ttRect, Texture2D.whiteTexture);
+            // Tooltip border
+            GUI.color = new Color(0.3f, 0.6f, 1f, 0.6f);
+            GUI.DrawTexture(new Rect(ttRect.x, ttRect.y, ttRect.width, 1), Texture2D.whiteTexture);
+            GUI.DrawTexture(new Rect(ttRect.x, ttRect.yMax - 1, ttRect.width, 1), Texture2D.whiteTexture);
+            GUI.DrawTexture(new Rect(ttRect.x, ttRect.y, 1, ttRect.height), Texture2D.whiteTexture);
+            GUI.DrawTexture(new Rect(ttRect.xMax - 1, ttRect.y, 1, ttRect.height), Texture2D.whiteTexture);
+            GUI.color = Color.white;
+
+            // Tooltip text
+            GUI.Label(new Rect(ttX + 6f, ttY + 3f, tooltipSize.x, tooltipSize.y), tooltipText, tooltipStyle);
+        }
 
         cy += gh + 2f;
 
@@ -413,7 +524,7 @@ public class BuoyDataOverlayUI : MonoBehaviour
 
     private void InitStyles()
     {
-        if (stylesInit) return;
+        if (stylesInit && minimizeBtnStyle != null) return;
         stylesInit = true;
 
         headerStyle = new GUIStyle(GUI.skin.label)
@@ -447,6 +558,24 @@ public class BuoyDataOverlayUI : MonoBehaviour
             fontSize = 10,
             normal = { textColor = new Color(0.55f, 0.55f, 0.6f) }
         };
+        tooltipStyle = new GUIStyle(GUI.skin.label)
+        {
+            fontSize = 11,
+            fontStyle = FontStyle.Bold,
+            normal = { textColor = new Color(0.85f, 0.9f, 1f) }
+        };
+        minimizeBtnStyle = new GUIStyle(GUI.skin.button)
+        {
+            fontSize = 14,
+            fontStyle = FontStyle.Bold,
+            alignment = TextAnchor.MiddleCenter,
+            normal = { textColor = new Color(0.45f, 0.45f, 0.5f) },
+            hover = { textColor = Color.white },
+            active = { textColor = Color.white },
+        };
+        minimizeBtnStyle.normal.background = null;
+        minimizeBtnStyle.hover.background = null;
+        minimizeBtnStyle.active.background = null;
     }
 
     private int ComputeHash(float[] values)

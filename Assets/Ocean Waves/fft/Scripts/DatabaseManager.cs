@@ -188,7 +188,15 @@ public static class FirestoreAuth
         using (var rsa = new System.Security.Cryptography.RSACryptoServiceProvider())
         {
             rsa.ImportParameters(rsaParams);
-            return rsa.SignData(Encoding.UTF8.GetBytes(data), "SHA256");
+
+            // Use RSAPKCS1SignatureFormatter for reliable SHA-256 signing on Mono
+            using (var sha256 = new System.Security.Cryptography.SHA256CryptoServiceProvider())
+            {
+                byte[] hash = sha256.ComputeHash(Encoding.UTF8.GetBytes(data));
+                var formatter = new System.Security.Cryptography.RSAPKCS1SignatureFormatter(rsa);
+                formatter.SetHashAlgorithm("SHA256");
+                return formatter.CreateSignature(hash);
+            }
         }
     }
 
@@ -320,7 +328,7 @@ public class DatabaseManager : MonoBehaviour
 {
     [Header("Firestore Settings")]
     [Tooltip("Path to serviceAccountKey.json (relative to Assets)")]
-    [SerializeField] private string serviceAccountKeyPath = "Assets/Ocean Waves/fft/Database/serviceAccountKey.json";
+    [SerializeField] private string serviceAccountKeyPath = "Assets/Ocean Waves/fft/Database/ocean-waves-ef108-firebase-adminsdk-fbsvc-43c577a90f.json";
 
     [Tooltip("Daftar collection (lokasi buoy) dari Firestore")]
     [SerializeField] private List<string> collectionList = new List<string>();
@@ -353,6 +361,9 @@ public class DatabaseManager : MonoBehaviour
     public static DatabaseManager Instance { get; private set; }
     public Dictionary<string, BuoyData> CachedData { get; private set; } = new Dictionary<string, BuoyData>();
     public bool IsLoading { get; private set; }
+
+    /// <summary>Key terakhir yang di-fetch (dipakai UI untuk menampilkan data aktif).</summary>
+    public string ActiveKey { get; set; }
 
     /// <summary>Nama collection yang sedang aktif.</summary>
     public string CurrentCollection => (collectionList != null && collectionList.Count > 0 && selectedCollectionIndex >= 0 && selectedCollectionIndex < collectionList.Count)
@@ -641,6 +652,7 @@ public class DatabaseManager : MonoBehaviour
     {
         string key = queryDate.Replace("-", "") + queryHour.ToString("D2");
         currentKey = key;
+        ActiveKey = key;
         status = "Fetching...";
         FetchDataByKey(key, data =>
         {
