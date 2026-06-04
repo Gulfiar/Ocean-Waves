@@ -134,6 +134,7 @@ GameObject:
   - component: {fileID: 77222651}
   - component: {fileID: 77222653}
   - component: {fileID: 77222654}
+  - component: {fileID: 77222655}
   m_Layer: 0
   m_Name: Ocean
   m_TagString: Untagged
@@ -158,6 +159,7 @@ MonoBehaviour:
   oceanMaterial: {fileID: 2100000, guid: 79f16f7e2e961cc46828737b584510ee, type: 2}
   updateMaterialProperties: 0
   showMaterialLods: 0
+  useMaterialLOD: 1
   lengthScale: 15
   vertexDensity: 30
   clipLevels: 8
@@ -177,6 +179,7 @@ MonoBehaviour:
   size: 256
   wavesSettings: {fileID: 11400000, guid: a15d9b9d6a919584db82c8af30e854c9, type: 2}
   alwaysRecalculateInitials: 0
+  useAsyncReadback: 1
   lengthScale0: 250
   lengthScale1: 17
   lengthScale2: 5
@@ -211,7 +214,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 9fce818c348c44b469fa94976f198ab2, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::DatabaseManager
-  serviceAccountKeyPath: Assets/Ocean Waves/fft/Database/ocean-waves-ef108-firebase-adminsdk-fbsvc-43c577a90f.json
+  serviceAccountKeyPath: Assets/Ocean Waves/fft/Database/key
   collectionList: []
   selectedCollectionIndex: 0
   fetchOnStart: 1
@@ -264,6 +267,7 @@ MonoBehaviour:
   showOverlay: 1
   panelWidth: 400
   graphHeight: 100
+  minimized: 0
 --- !u!114 &77222654
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -278,11 +282,31 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BuoyDateTimePicker
   databaseManager: {fileID: 0}
   showPicker: 1
-  panelX: 15
-  panelY: 15
+  panelX: 18
+  panelY: 50
   autoFetch: 1
   currentDate: 
   currentHour: 7
+  minimized: 1
+--- !u!114 &77222655
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 77222647}
+  m_Enabled: 0
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 56643e64bd5e3874484129e10a91f41a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::FeatureTesting
+  wavesGenerator: {fileID: 0}
+  oceanGeometry: {fileID: 0}
+  enableHashChangeDetection: 1
+  enableAsyncReadback: 1
+  enableMaterialLOD: 1
+  showDebugUI: 1
+  minimized: 1
 --- !u!1 &281865644
 GameObject:
   m_ObjectHideFlags: 0
@@ -474,6 +498,18 @@ MonoBehaviour:
         m_CallState: 2
       - m_Target: {fileID: 77222654}
         m_TargetAssemblyTypeName: BuoyDateTimePicker, Assembly-CSharp
+        m_MethodName: set_enabled
+        m_Mode: 6
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 1
+        m_CallState: 2
+      - m_Target: {fileID: 77222655}
+        m_TargetAssemblyTypeName: FeatureTesting, Assembly-CSharp
         m_MethodName: set_enabled
         m_Mode: 6
         m_Arguments:
@@ -867,6 +903,18 @@ MonoBehaviour:
           m_StringArgument: 
           m_BoolArgument: 0
         m_CallState: 2
+      - m_Target: {fileID: 77222655}
+        m_TargetAssemblyTypeName: FeatureTesting, Assembly-CSharp
+        m_MethodName: set_enabled
+        m_Mode: 6
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 0
+        m_CallState: 2
 --- !u!114 &751063284
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1137,6 +1185,18 @@ MonoBehaviour:
         m_CallState: 2
       - m_Target: {fileID: 77222654}
         m_TargetAssemblyTypeName: BuoyDateTimePicker, Assembly-CSharp
+        m_MethodName: set_enabled
+        m_Mode: 6
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 1
+        m_CallState: 2
+      - m_Target: {fileID: 77222655}
+        m_TargetAssemblyTypeName: FeatureTesting, Assembly-CSharp
         m_MethodName: set_enabled
         m_Mode: 6
         m_Arguments:
@@ -1797,6 +1857,18 @@ MonoBehaviour:
         m_CallState: 2
       - m_Target: {fileID: 77222654}
         m_TargetAssemblyTypeName: BuoyDateTimePicker, Assembly-CSharp
+        m_MethodName: set_enabled
+        m_Mode: 6
+        m_Arguments:
+          m_ObjectArgument: {fileID: 0}
+          m_ObjectArgumentAssemblyTypeName: UnityEngine.Object, UnityEngine
+          m_IntArgument: 0
+          m_FloatArgument: 0
+          m_StringArgument: 
+          m_BoolArgument: 1
+        m_CallState: 2
+      - m_Target: {fileID: 77222655}
+        m_TargetAssemblyTypeName: FeatureTesting, Assembly-CSharp
         m_MethodName: set_enabled
         m_Mode: 6
         m_Arguments:

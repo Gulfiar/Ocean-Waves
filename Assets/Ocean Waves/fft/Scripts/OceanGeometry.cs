@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using UnityEngine;
 
 public class OceanGeometry : MonoBehaviour
@@ -13,6 +13,8 @@ public class OceanGeometry : MonoBehaviour
     bool updateMaterialProperties;
     [SerializeField]
     bool showMaterialLods;
+    [SerializeField]
+    public bool useMaterialLOD = true;
 
     [SerializeField]
     float lengthScale = 10;
@@ -90,6 +92,8 @@ public class OceanGeometry : MonoBehaviour
 
     void UpdateMaterials()
     {
+        Shader.SetGlobalFloat("_MaterialLODDisabled", useMaterialLOD ? 0f : 1f);
+
         if (updateMaterialProperties && !showMaterialLods)
         {
             for (int i = 0; i < 3; i++)
@@ -121,6 +125,9 @@ public class OceanGeometry : MonoBehaviour
 
     Material GetMaterial(int lodLevel)
     {
+        if (!useMaterialLOD)
+            return materials[0];
+
         if (lodLevel - 2 <= 0)
             return materials[0];
 

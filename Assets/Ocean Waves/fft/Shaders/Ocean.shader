@@ -1,4 +1,4 @@
-﻿Shader "Ocean/Ocean"
+Shader "Ocean/Ocean"
 {
     Properties
     {
@@ -72,6 +72,7 @@
         float _LOD_scale;
         float _SSSBase;
         float _SSSScale;
+        float _MaterialLODDisabled;
 
         void vert(inout appdata_full v, out Input o)
         {
@@ -143,10 +144,21 @@
             o.Normal = WorldToTangentNormalVector(IN, worldNormal);
             
             #if defined(CLOSE)
+            // Heavy loop simulating high pixel shader load to demonstrate Material LOD benefit
+            float dummyVal = 0.0;
+            if (_MaterialLODDisabled > 0.5)
+            {
+                for (int dummyI = 0; dummyI < 80; dummyI++)
+                {
+                    dummyVal += sin(IN.worldUV.x * dummyI) * cos(IN.worldUV.y * dummyI);
+                    dummyVal += tex2D(_Derivatives_c2, IN.worldUV / (LengthScale2 + dummyVal * 0.0001)).x * 0.0001;
+                }
+            }
+
             float jacobian = tex2D(_Turbulence_c0, IN.worldUV / LengthScale0).x
                 + tex2D(_Turbulence_c1, IN.worldUV / LengthScale1).x
                 + tex2D(_Turbulence_c2, IN.worldUV / LengthScale2).x;
-            jacobian = min(1, max(0, (-jacobian + _FoamBiasLOD2) * _FoamScale));
+            jacobian = min(1, max(0, (-jacobian + _FoamBiasLOD2) * _FoamScale)) + dummyVal * 0.000001;
             #elif defined(MID)
             float jacobian = tex2D(_Turbulence_c0, IN.worldUV / LengthScale0).x
                 + tex2D(_Turbulence_c1, IN.worldUV / LengthScale1).x;

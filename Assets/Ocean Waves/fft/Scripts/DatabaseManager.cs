@@ -327,8 +327,8 @@ public static class FirestoreAuth
 public class DatabaseManager : MonoBehaviour
 {
     [Header("Firestore Settings")]
-    [Tooltip("Path to serviceAccountKey.json (relative to Assets)")]
-    [SerializeField] private string serviceAccountKeyPath = "Assets/Ocean Waves/fft/Database/ocean-waves-ef108-firebase-adminsdk-fbsvc-43c577a90f.json";
+    [Tooltip("Path to serviceAccountKey folder or JSON file (relative to Assets)")]
+    [SerializeField] private string serviceAccountKeyPath = "Assets/Ocean Waves/fft/Database/key";
 
     [Tooltip("Daftar collection (lokasi buoy) dari Firestore")]
     [SerializeField] private List<string> collectionList = new List<string>();
@@ -382,6 +382,22 @@ public class DatabaseManager : MonoBehaviour
         else { Destroy(gameObject); return; }
 
         string fullPath = System.IO.Path.Combine(Application.dataPath, "..",  serviceAccountKeyPath);
+        
+        // If the path points to a directory, dynamically search for the first JSON file inside it
+        if (System.IO.Directory.Exists(fullPath))
+        {
+            string[] jsonFiles = System.IO.Directory.GetFiles(fullPath, "*.json");
+            if (jsonFiles.Length > 0)
+            {
+                fullPath = jsonFiles[0];
+            }
+            else
+            {
+                Debug.LogError($"[DatabaseManager] No .json file found in key directory: {fullPath}");
+            }
+        }
+
+        Debug.Log($"[DatabaseManager] Loading service account key from: {fullPath}");
         FirestoreAuth.LoadServiceAccount(fullPath);
     }
 

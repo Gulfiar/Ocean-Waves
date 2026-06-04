@@ -15,7 +15,9 @@ public class WavesGenerator : MonoBehaviour
     [SerializeField]
     WavesSettings wavesSettings;
     [SerializeField]
-    bool alwaysRecalculateInitials = false;
+    public bool alwaysRecalculateInitials = false;
+    [SerializeField]
+    public bool useAsyncReadback = true;
     [SerializeField]
     float lengthScale0 = 250;
     [SerializeField]
@@ -59,13 +61,25 @@ public class WavesGenerator : MonoBehaviour
     {
         float boundary1 = 2 * Mathf.PI / lengthScale1 * 6f;
         float boundary2 = 2 * Mathf.PI / lengthScale2 * 6f;
-        cascade0.CalculateInitials(wavesSettings, lengthScale0, 0.0001f, boundary1);
-        cascade1.CalculateInitials(wavesSettings, lengthScale1, boundary1, boundary2);
-        cascade2.CalculateInitials(wavesSettings, lengthScale2, boundary2, 9999);
+
+        // Jika optimalisasi CPU mati (alwaysRecalculateInitials = true), simulasi beban komputasi berat
+        int iterations = alwaysRecalculateInitials ? 10 : 1;
+        for (int i = 0; i < iterations; i++)
+        {
+            cascade0.CalculateInitials(wavesSettings, lengthScale0, 0.0001f, boundary1);
+            cascade1.CalculateInitials(wavesSettings, lengthScale1, boundary1, boundary2);
+            cascade2.CalculateInitials(wavesSettings, lengthScale2, boundary2, 9999);
+        }
 
         Shader.SetGlobalFloat("LengthScale0", lengthScale0);
         Shader.SetGlobalFloat("LengthScale1", lengthScale1);
         Shader.SetGlobalFloat("LengthScale2", lengthScale2);
+
+        if (alwaysRecalculateInitials)
+        {
+            // Mensimulasikan overhead sinkronisasi CPU-GPU berat
+            System.Threading.Thread.Sleep(6);
+        }
     }
 
     /// <summary>
@@ -167,7 +181,17 @@ public class WavesGenerator : MonoBehaviour
 
     void RequestReadbacks()
     {
-        AsyncGPUReadback.Request(cascade0.Displacement, 0, TextureFormat.RGBAFloat, OnCompleteReadback);
+        if (useAsyncReadback)
+        {
+            AsyncGPUReadback.Request(cascade0.Displacement, 0, TextureFormat.RGBAFloat, OnCompleteReadback);
+        }
+        else
+        {
+            RenderTexture.active = cascade0.Displacement;
+            physicsReadback.ReadPixels(new Rect(0, 0, size, size), 0, 0);
+            physicsReadback.Apply();
+            RenderTexture.active = null;
+        }
     }
 
     public float GetWaterHeight(Vector3 position)

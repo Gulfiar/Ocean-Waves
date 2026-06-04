@@ -44,7 +44,7 @@ public class BuoyDataOverlayUI : MonoBehaviour
     // ─── Styles (lazy init) ──────────────────────────────────────
     private GUIStyle headerStyle, statusStyle, labelStyle, valueStyle, arrowStyle, graphInfoStyle, tooltipStyle, minimizeBtnStyle;
     private bool stylesInit;
-    private bool minimized = false;
+    [SerializeField] private bool minimized = false;
 
     private void Start()
     {
@@ -129,18 +129,21 @@ public class BuoyDataOverlayUI : MonoBehaviour
 
         // ─── Calculate panel height ──────────────────────
         float lh = 22f;
-        float ph = 76f; // header + status + collection
+        float ph = 34f; // Header space (y+10 to y+34)
         if (current != null)
         {
-            ph += lh * 2; // location + position rows
+            if (current.posisi != null) ph += 18f;
+            if (!string.IsNullOrEmpty(current.date) || !string.IsNullOrEmpty(current.time)) ph += 18f;
+            ph += 12f; // Separator & spacing
             foreach (var p in paramDefs)
             {
-                ph += lh; // row
+                ph += lh;
                 if (p.expanded) ph += graphHeight + 24f;
             }
         }
         else
         {
+            ph += 12f;
             ph += lh;
         }
 
@@ -183,6 +186,14 @@ public class BuoyDataOverlayUI : MonoBehaviour
             cy += 18f;
         }
 
+        // Date & Time info
+        if (current != null && (!string.IsNullOrEmpty(current.date) || !string.IsNullOrEmpty(current.time)))
+        {
+            statusStyle.normal.textColor = new Color(0.6f, 0.6f, 0.7f);
+            GUI.Label(new Rect(cx, cy, panelWidth - 28f, 16f), $"Date & Time: {current.date} {current.time}", statusStyle);
+            cy += 18f;
+        }
+
         // ─── Separator line ──────────────────────────
         GUI.color = new Color(0.3f, 0.5f, 0.8f, 0.4f);
         GUI.DrawTexture(new Rect(cx, cy, panelWidth - 32f, 1f), Texture2D.whiteTexture);
@@ -209,33 +220,54 @@ public class BuoyDataOverlayUI : MonoBehaviour
 
     private void DrawMinimized()
     {
-        float minW = 220f;
-        float minH = 32f;
-        float x = Screen.width - minW - 15f;
+        float boxSize = 36f;
+        float x = Screen.width - boxSize - 15f;
         float y = 15f;
 
-        Rect minRect = new Rect(x, y, minW, minH);
+        Rect minRect = new Rect(x, y, boxSize, boxSize);
         GUI.color = new Color(0.04f, 0.04f, 0.08f, 0.88f);
         GUI.DrawTexture(minRect, Texture2D.whiteTexture);
         GUI.color = Color.white;
         DrawBorder(minRect, new Color(0.2f, 0.5f, 0.8f, 0.5f));
 
-        // Get current location name
-        var cached = databaseManager.CachedData;
-        string locName = databaseManager.CurrentCollection;
-        if (cached != null && cached.Count > 0)
+        // Styling tombol ikon emoji
+        GUIStyle iconStyle = new GUIStyle(GUI.skin.button)
         {
-            string activeKey = databaseManager.ActiveKey;
-            if (!string.IsNullOrEmpty(activeKey) && cached.ContainsKey(activeKey))
-                locName = cached[activeKey].loc_name ?? locName;
-        }
+            fontSize = 18,
+            alignment = TextAnchor.MiddleCenter,
+            normal = { textColor = Color.white },
+            hover = { textColor = new Color(0.4f, 0.7f, 1f) },
+            active = { textColor = new Color(0.4f, 0.7f, 1f) }
+        };
+        iconStyle.normal.background = null;
+        iconStyle.hover.background = null;
+        iconStyle.active.background = null;
 
-        GUI.Label(new Rect(x + 10f, y + 4f, minW - 44f, minH - 8f),
-            $"🌊 {locName.ToUpper()}", headerStyle);
-
-        // Expand button
-        if (GUI.Button(new Rect(x + minW - 32f, y + 4f, 24f, 24f), "□", minimizeBtnStyle))
+        // Klik untuk mengembalikan ke tampilan penuh
+        if (GUI.Button(minRect, "📊", iconStyle))
             minimized = false;
+
+        // Menampilkan tooltip interaktif saat melayang di atas ikon
+        if (minRect.Contains(Event.current.mousePosition))
+        {
+            string tooltipText = "Tampilkan Data Buoy (📊)";
+            Vector2 tooltipSize = tooltipStyle.CalcSize(new GUIContent(tooltipText));
+            tooltipSize.x += 12f;
+            tooltipSize.y += 6f;
+
+            float ttX = x - tooltipSize.x - 8f;
+            float ttY = y + (boxSize - tooltipSize.y) / 2f;
+
+            Rect ttRect = new Rect(ttX, ttY, tooltipSize.x, tooltipSize.y);
+            GUI.color = new Color(0.08f, 0.08f, 0.14f, 0.95f);
+            GUI.DrawTexture(ttRect, Texture2D.whiteTexture);
+            
+            GUI.color = new Color(0.2f, 0.5f, 0.8f, 0.6f);
+            DrawBorder(ttRect, new Color(0.2f, 0.5f, 0.8f, 0.6f));
+            GUI.color = Color.white;
+
+            GUI.Label(new Rect(ttX + 6f, ttY + 3f, tooltipSize.x, tooltipSize.y), tooltipText, tooltipStyle);
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -294,7 +326,7 @@ public class BuoyDataOverlayUI : MonoBehaviour
         // ─── Expanded graph ──────────────────────────────────────
         if (param.expanded && cached != null && cached.Count >= 2)
         {
-            DrawGraph(ref cy, cx, pw - 32f, param, cached);
+            DrawGraph(ref cy, cx, pw - 32f, param, cached, current);
         }
     }
 
@@ -303,7 +335,7 @@ public class BuoyDataOverlayUI : MonoBehaviour
     // ═══════════════════════════════════════════════════════════════
 
     private void DrawGraph(ref float cy, float gx, float gw, ParamDef param,
-        Dictionary<string, BuoyData> cached)
+        Dictionary<string, BuoyData> cached, BuoyData current)
     {
         float gh = graphHeight;
 
@@ -312,8 +344,39 @@ public class BuoyDataOverlayUI : MonoBehaviour
         GUI.DrawTexture(new Rect(gx - 2f, cy, gw + 4f, gh), Texture2D.whiteTexture);
         GUI.color = Color.white;
 
-        // Get sorted values
-        var sorted = cached.OrderBy(k => k.Key).ToList();
+        // Filter and sort values by 24-hour cycle starting at 07:00 and ending at 06:00 next day
+        DateTime? currentDt = GetDataDateTime(current);
+        List<KeyValuePair<string, BuoyData>> sorted;
+        if (currentDt.HasValue)
+        {
+            DateTime dt = currentDt.Value;
+            DateTime cycleStart = (dt.Hour >= 7)
+                ? new DateTime(dt.Year, dt.Month, dt.Day, 7, 0, 0)
+                : new DateTime(dt.Year, dt.Month, dt.Day, 7, 0, 0).AddDays(-1);
+            DateTime cycleEnd = cycleStart.AddDays(1).AddHours(-1);
+
+            sorted = cached
+                .Where(k => {
+                    DateTime? itemDt = GetDataDateTime(k.Value);
+                    return itemDt.HasValue && itemDt.Value >= cycleStart && itemDt.Value <= cycleEnd;
+                })
+                .OrderBy(k => k.Key)
+                .ToList();
+        }
+        else
+        {
+            sorted = cached.OrderBy(k => k.Key).ToList();
+        }
+
+        if (sorted.Count < 2)
+        {
+            // Graph background message
+            graphInfoStyle.alignment = TextAnchor.MiddleCenter;
+            GUI.Label(new Rect(gx, cy + (gh - 14f) / 2f, gw, 14f), "Not enough data for this daily cycle.", graphInfoStyle);
+            cy += gh + 2f;
+            return;
+        }
+
         float[] values = sorted.Select(k => param.getter(k.Value)).ToArray();
         string[] timeLabels = sorted.Select(k =>
         {
@@ -586,5 +649,21 @@ public class BuoyDataOverlayUI : MonoBehaviour
             foreach (var v in values) h = h * 31 + v.GetHashCode();
             return h;
         }
+    }
+
+    private DateTime? GetDataDateTime(BuoyData d)
+    {
+        if (d == null || string.IsNullOrEmpty(d.date) || string.IsNullOrEmpty(d.time)) return null;
+        if (DateTime.TryParseExact($"{d.date} {d.time}", "yyyy-MM-dd HH:mm",
+            System.Globalization.CultureInfo.InvariantCulture,
+            System.Globalization.DateTimeStyles.None, out DateTime dt))
+        {
+            return dt;
+        }
+        if (DateTime.TryParse($"{d.date} {d.time}", out dt))
+        {
+            return dt;
+        }
+        return null;
     }
 }

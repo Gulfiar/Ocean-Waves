@@ -37,7 +37,7 @@ public class BuoyDateTimePicker : MonoBehaviour
     private int selectedDay;
     private int selectedHour;
     private bool calendarOpen = true;
-    private bool minimized = false;
+    [SerializeField] private bool minimized = false;
     private float sliderValue;
 
     // ─── Layout constants ────────────────────────────────────────
@@ -67,7 +67,7 @@ public class BuoyDateTimePicker : MonoBehaviour
     // ─── Styles (lazy init) ──────────────────────────────────────
     private GUIStyle titleStyle, monthLabelStyle, navBtnStyle, minimizeBtnStyle;
     private GUIStyle dayHeaderStyle, dayCellStyle, dayCellSelectedStyle, dayCellTodayStyle, dayCellDimStyle;
-    private GUIStyle sectionLabelStyle, statusStyle, fetchBtnStyle, hourLabelStyle;
+    private GUIStyle sectionLabelStyle, statusStyle, fetchBtnStyle, hourLabelStyle, tooltipStyle;
     private bool stylesInit;
 
     // ─── Day-of-week headers ─────────────────────────────────────
@@ -217,22 +217,53 @@ public class BuoyDateTimePicker : MonoBehaviour
 
     private void DrawMinimized()
     {
+        float boxSize = 36f;
         float x = panelX;
         float y = panelY;
 
-        Rect minRect = new Rect(x, y, MINIMIZED_WIDTH, MINIMIZED_HEIGHT);
+        Rect minRect = new Rect(x, y, boxSize, boxSize);
         GUI.color = panelBg;
         GUI.DrawTexture(minRect, Texture2D.whiteTexture);
         GUI.color = Color.white;
         DrawBorder(minRect, borderColor);
 
-        // Label
-        string label = $"📅 {currentDate}  {selectedHour:D2}:00";
-        GUI.Label(new Rect(x + 10f, y + 4f, MINIMIZED_WIDTH - 44f, MINIMIZED_HEIGHT - 8f), label, titleStyle);
+        // Styling tombol ikon emoji
+        GUIStyle iconStyle = new GUIStyle(GUI.skin.button)
+        {
+            fontSize = 18,
+            alignment = TextAnchor.MiddleCenter,
+            normal = { textColor = textBright },
+            hover = { textColor = accentColor },
+            active = { textColor = accentColor }
+        };
+        iconStyle.normal.background = null;
+        iconStyle.hover.background = null;
+        iconStyle.active.background = null;
 
-        // Expand button
-        if (GUI.Button(new Rect(x + MINIMIZED_WIDTH - 32f, y + 4f, 24f, 24f), "□", minimizeBtnStyle))
+        // Klik untuk mengembalikan ke tampilan penuh
+        if (GUI.Button(minRect, "📅", iconStyle))
             minimized = false;
+
+        // Menampilkan tooltip interaktif saat melayang di atas ikon
+        if (minRect.Contains(Event.current.mousePosition))
+        {
+            string tooltipText = $"Pilih Waktu (📅 {currentDate} {selectedHour:D2}:00)";
+            Vector2 tooltipSize = tooltipStyle.CalcSize(new GUIContent(tooltipText));
+            tooltipSize.x += 12f;
+            tooltipSize.y += 6f;
+
+            float ttX = x + boxSize + 8f;
+            float ttY = y + (boxSize - tooltipSize.y) / 2f;
+
+            Rect ttRect = new Rect(ttX, ttY, tooltipSize.x, tooltipSize.y);
+            GUI.color = panelBg;
+            GUI.DrawTexture(ttRect, Texture2D.whiteTexture);
+            
+            DrawBorder(ttRect, borderColor);
+            GUI.color = Color.white;
+
+            GUI.Label(new Rect(ttX + 6f, ttY + 3f, tooltipSize.x, tooltipSize.y), tooltipText, tooltipStyle);
+        }
     }
 
     // ═══════════════════════════════════════════════════════════════
@@ -656,6 +687,13 @@ public class BuoyDateTimePicker : MonoBehaviour
             normal = { textColor = textBright },
             hover = { textColor = textBright },
             active = { textColor = textBright },
+        };
+
+        tooltipStyle = new GUIStyle(GUI.skin.label)
+        {
+            fontSize = 11,
+            fontStyle = FontStyle.Bold,
+            normal = { textColor = textBright }
         };
     }
 }
