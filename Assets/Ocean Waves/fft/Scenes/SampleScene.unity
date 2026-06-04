@@ -222,6 +222,7 @@ MonoBehaviour:
   autoRefreshInterval: 0
   queryDate: 
   queryHour: 7
+  enableTestAutoRefresh: 0
   testRefreshInterval: 5
   currentKey: "\u2014"
   status: Idle
