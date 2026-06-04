@@ -215,11 +215,12 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::DatabaseManager
   serviceAccountKeyPath: Assets/Ocean Waves/fft/Database/key
+  serviceAccountKeyFile: {fileID: 4900000, guid: 5eeee1db8b912554da1aa6099a2b230c, type: 3}
   collectionList: []
   selectedCollectionIndex: 0
   fetchOnStart: 1
   autoRefreshInterval: 0
-  queryDate: 2026-05-06
+  queryDate: 
   queryHour: 7
   testRefreshInterval: 5
   currentKey: "\u2014"

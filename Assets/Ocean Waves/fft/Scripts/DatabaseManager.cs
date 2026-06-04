@@ -125,6 +125,12 @@ public static class FirestoreAuth
         Debug.Log($"[FirestoreAuth] Loaded service account: {cachedKey.client_email}");
     }
 
+    public static void LoadServiceAccountJson(string json)
+    {
+        cachedKey = JsonConvert.DeserializeObject<ServiceAccountKey>(json);
+        Debug.Log($"[FirestoreAuth] Loaded service account from JSON content: {cachedKey.client_email}");
+    }
+
     public static bool HasValidToken => !string.IsNullOrEmpty(cachedToken) && Time.realtimeSinceStartup < tokenExpiry;
 
     public static IEnumerator GetAccessToken(Action<string> callback)
@@ -330,6 +336,9 @@ public class DatabaseManager : MonoBehaviour
     [Tooltip("Path to serviceAccountKey folder or JSON file (relative to Assets)")]
     [SerializeField] private string serviceAccountKeyPath = "Assets/Ocean Waves/fft/Database/key";
 
+    [Tooltip("Drag & drop service account JSON file here as a TextAsset (recommended for builds)")]
+    [SerializeField] private TextAsset serviceAccountKeyFile;
+
     [Tooltip("Daftar collection (lokasi buoy) dari Firestore")]
     [SerializeField] private List<string> collectionList = new List<string>();
 
@@ -341,10 +350,11 @@ public class DatabaseManager : MonoBehaviour
     [SerializeField] private float autoRefreshInterval = 0f;
 
     [Header("Realtime Test Display")]
-    [SerializeField] private string queryDate = "2026-05-06";
+    [SerializeField] private string queryDate = "";
     [Range(0, 23)]
     [SerializeField] private int queryHour = 7;
-    [SerializeField] private float testRefreshInterval = 5f;
+    [SerializeField] private bool enableTestAutoRefresh = false;
+    [SerializeField] private float testRefreshInterval = 0f;
 
     [Header("Status (Read-Only)")]
     [SerializeField] private string currentKey = "—";
@@ -381,24 +391,39 @@ public class DatabaseManager : MonoBehaviour
         if (Instance == null) Instance = this;
         else { Destroy(gameObject); return; }
 
-        string fullPath = System.IO.Path.Combine(Application.dataPath, "..",  serviceAccountKeyPath);
-        
-        // If the path points to a directory, dynamically search for the first JSON file inside it
-        if (System.IO.Directory.Exists(fullPath))
+        if (serviceAccountKeyFile != null)
         {
-            string[] jsonFiles = System.IO.Directory.GetFiles(fullPath, "*.json");
-            if (jsonFiles.Length > 0)
+            Debug.Log("[DatabaseManager] Loading service account key from TextAsset reference.");
+            FirestoreAuth.LoadServiceAccountJson(serviceAccountKeyFile.text);
+        }
+        else
+        {
+            string fullPath = System.IO.Path.Combine(Application.dataPath, "..",  serviceAccountKeyPath);
+            
+            // If the path points to a directory, dynamically search for the first JSON file inside it
+            if (System.IO.Directory.Exists(fullPath))
             {
-                fullPath = jsonFiles[0];
+                string[] jsonFiles = System.IO.Directory.GetFiles(fullPath, "*.json");
+                if (jsonFiles.Length > 0)
+                {
+                    fullPath = jsonFiles[0];
+                }
+                else
+                {
+                    Debug.LogError($"[DatabaseManager] No .json file found in key directory: {fullPath}");
+                }
+            }
+
+            Debug.Log($"[DatabaseManager] Loading service account key from file path: {fullPath}");
+            if (System.IO.File.Exists(fullPath))
+            {
+                FirestoreAuth.LoadServiceAccount(fullPath);
             }
             else
             {
-                Debug.LogError($"[DatabaseManager] No .json file found in key directory: {fullPath}");
+                Debug.LogError($"[DatabaseManager] Service account key file not found at path: {fullPath}");
             }
         }
-
-        Debug.Log($"[DatabaseManager] Loading service account key from: {fullPath}");
-        FirestoreAuth.LoadServiceAccount(fullPath);
     }
 
     private void Start()
@@ -415,7 +440,7 @@ public class DatabaseManager : MonoBehaviour
         if (fetchOnStart && !string.IsNullOrEmpty(CurrentCollection))
             FetchAllData();
         if (autoRefreshInterval > 0) StartCoroutine(AutoRefreshCoroutine());
-        if (testRefreshInterval > 0) testRefreshCoroutine = StartCoroutine(TestRefreshCoroutine());
+        if (enableTestAutoRefresh && testRefreshInterval > 0) testRefreshCoroutine = StartCoroutine(TestRefreshCoroutine());
     }
 
     private void OnValidate() { queryHour = Mathf.Clamp(queryHour, 0, 23); }
@@ -666,6 +691,12 @@ public class DatabaseManager : MonoBehaviour
     [ContextMenu("Fetch Test Data")]
     public void FetchTestData()
     {
+        if (string.IsNullOrEmpty(queryDate))
+        {
+            Debug.LogWarning("[DatabaseManager] queryDate is empty. Skipping FetchTestData.");
+            status = "Skipped - Empty queryDate";
+            return;
+        }
         string key = queryDate.Replace("-", "") + queryHour.ToString("D2");
         currentKey = key;
         ActiveKey = key;
