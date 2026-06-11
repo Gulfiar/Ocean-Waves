@@ -19,6 +19,8 @@ public class WavesGenerator : MonoBehaviour
     [SerializeField]
     public bool useAsyncReadback = true;
     [SerializeField]
+    public bool useGPUSimulation = true;
+    [SerializeField]
     float lengthScale0 = 250;
     [SerializeField]
     float lengthScale1 = 17;
@@ -128,9 +130,18 @@ public class WavesGenerator : MonoBehaviour
             prevSettingsHash = currentHash;
         }
 
-        cascade0.CalculateWavesAtTime(Time.time);
-        cascade1.CalculateWavesAtTime(Time.time);
-        cascade2.CalculateWavesAtTime(Time.time);
+        if (useGPUSimulation)
+        {
+            cascade0.CalculateWavesAtTime(Time.time);
+            cascade1.CalculateWavesAtTime(Time.time);
+            cascade2.CalculateWavesAtTime(Time.time);
+        }
+        else
+        {
+            cascade0.CalculateWavesAtTimeCPU(Time.time, wavesSettings);
+            cascade1.CalculateWavesAtTimeCPU(Time.time, wavesSettings);
+            cascade2.CalculateWavesAtTimeCPU(Time.time, wavesSettings);
+        }
 
         RequestReadbacks();
     }
@@ -181,6 +192,16 @@ public class WavesGenerator : MonoBehaviour
 
     void RequestReadbacks()
     {
+        if (!useGPUSimulation)
+        {
+            if (cascade0.CPUDisplacement != null)
+            {
+                physicsReadback.SetPixels(cascade0.CPUDisplacement.GetPixels());
+                physicsReadback.Apply();
+            }
+            return;
+        }
+
         if (useAsyncReadback)
         {
             AsyncGPUReadback.Request(cascade0.Displacement, 0, TextureFormat.RGBAFloat, OnCompleteReadback);

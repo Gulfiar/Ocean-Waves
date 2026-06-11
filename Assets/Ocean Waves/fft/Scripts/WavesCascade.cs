@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using UnityEngine;
 
 public class WavesCascade
@@ -10,6 +10,7 @@ public class WavesCascade
     public Texture2D GaussianNoise => gaussianNoise;
     public RenderTexture PrecomputedData => precomputedData;
     public RenderTexture InitialSpectrum => initialSpectrum;
+    public Texture2D CPUDisplacement => cpuDisplacement;
 
     readonly int size;
     readonly ComputeShader initialSpectrumShader;
@@ -32,6 +33,11 @@ public class WavesCascade
     readonly RenderTexture turbulence;
 
     float lambda;
+    float lengthScale;
+    Texture2D cpuDisplacement;
+    Texture2D cpuDerivatives;
+    Texture2D cpuTurbulence;
+
 
     public WavesCascade(int size,
                         ComputeShader initialSpectrumShader,
@@ -69,12 +75,16 @@ public class WavesCascade
     public void Dispose()
     {
         paramsBuffer?.Release();
+        if (cpuDisplacement != null) UnityEngine.Object.Destroy(cpuDisplacement);
+        if (cpuDerivatives != null) UnityEngine.Object.Destroy(cpuDerivatives);
+        if (cpuTurbulence != null) UnityEngine.Object.Destroy(cpuTurbulence);
     }
 
     public void CalculateInitials(WavesSettings wavesSettings, float lengthScale,
                                   float cutoffLow, float cutoffHigh)
     {
         lambda = wavesSettings.lambda;
+        this.lengthScale = lengthScale;
 
         initialSpectrumShader.SetInt(SIZE_PROP, size);
         initialSpectrumShader.SetFloat(LENGTH_SCALE_PROP, lengthScale);
@@ -122,6 +132,142 @@ public class WavesCascade
         texturesMergerShader.SetTexture(KERNEL_RESULT_TEXTURES, TURBULENCE_PROP, turbulence);
         texturesMergerShader.SetFloat(LAMBDA_PROP, lambda);
         texturesMergerShader.Dispatch(KERNEL_RESULT_TEXTURES, size / LOCAL_WORK_GROUPS_X, size / LOCAL_WORK_GROUPS_Y, 1);
+
+        derivatives.GenerateMips();
+        turbulence.GenerateMips();
+    }
+
+    void InitCPUTextures()
+    {
+        if (cpuDisplacement == null)
+        {
+            cpuDisplacement = new Texture2D(size, size, TextureFormat.RGBAFloat, false, true);
+            cpuDerivatives = new Texture2D(size, size, TextureFormat.RGBAFloat, false, true);
+            cpuTurbulence = new Texture2D(size, size, TextureFormat.RGBAFloat, false, true);
+
+            Color[] initTurb = new Color[size * size];
+            for (int i = 0; i < initTurb.Length; i++) initTurb[i] = new Color(1, 1, 1, 1);
+            cpuTurbulence.SetPixels(initTurb);
+            cpuTurbulence.Apply();
+        }
+    }
+
+    public void CalculateWavesAtTimeCPU(float time, WavesSettings wavesSettings)
+    {
+        InitCPUTextures();
+
+        float g = wavesSettings.g;
+        float windSpeed = wavesSettings.local.windSpeed;
+        float angle = wavesSettings.local.windDirection / 180f * Mathf.PI;
+        float lambda = wavesSettings.lambda;
+
+        int numWaves = 8;
+        float[] waveK = new float[numWaves];
+        float[] waveOmega = new float[numWaves];
+        float[] waveAmp = new float[numWaves];
+        Vector2[] waveDir = new Vector2[numWaves];
+        float[] waveQ = new float[numWaves];
+
+        float peakOmega = 22f * Mathf.Pow(windSpeed * wavesSettings.local.fetch / (g * g), -0.33f);
+        if (float.IsNaN(peakOmega) || peakOmega <= 0) peakOmega = 1.0f;
+
+        // Enforce periodicity over lengthScale to make the waves tile seamlessly (no seams)
+        float k_base = 2f * Mathf.PI / lengthScale;
+
+        for (int i = 0; i < numWaves; i++)
+        {
+            float wAngle = angle + (i - 3.5f) * 0.25f;
+            waveDir[i] = new Vector2(Mathf.Cos(wAngle), Mathf.Sin(wAngle));
+
+            // Desired frequencies around the peak
+            float targetOmega = peakOmega * (0.4f + i * 0.2f);
+            float targetK = (targetOmega * targetOmega) / g;
+
+            // Quantize k to be a multiple of k_base
+            int n = Mathf.Max(1, Mathf.RoundToInt(targetK / k_base));
+            waveK[i] = n * k_base;
+
+            // Recalculate omega for the quantized k using deep water dispersion
+            waveOmega[i] = Mathf.Sqrt(g * waveK[i]);
+
+            float amp = wavesSettings.local.scale * 0.05f * Mathf.Exp(-1.25f * Mathf.Pow(peakOmega / waveOmega[i], 4)) / (waveK[i] * waveK[i] + 0.1f);
+            waveAmp[i] = Mathf.Min(amp, 1.5f / waveK[i]);
+            
+            // Limit steepness factor
+            waveQ[i] = lambda / (waveK[i] * numWaves);
+        }
+
+        Color[] dispPixels = new Color[size * size];
+        Color[] derivPixels = new Color[size * size];
+        Color[] turbPixels = cpuTurbulence.GetPixels();
+
+        float invSize = 1.0f / size;
+        float scale = lengthScale;
+
+        for (int y = 0; y < size; y++)
+        {
+            float v = y * invSize;
+            float zPos = v * scale;
+
+            for (int x = 0; x < size; x++)
+            {
+                float u = x * invSize;
+                float xPos = u * scale;
+
+                Vector3 disp = Vector3.zero;
+                float dy_dx = 0f;
+                float dy_dz = 0f;
+                float dx_dx = 0f;
+                float dz_dz = 0f;
+
+                for (int i = 0; i < numWaves; i++)
+                {
+                    float dot = waveDir[i].x * xPos + waveDir[i].y * zPos;
+                    float theta = waveK[i] * dot - waveOmega[i] * time;
+                    float cos = Mathf.Cos(theta);
+                    float sin = Mathf.Sin(theta);
+
+                    // displacement: horizontal offset uses waveQ * waveAmp
+                    disp.x += waveQ[i] * waveAmp[i] * waveDir[i].x * cos;
+                    disp.y += waveAmp[i] * sin;
+                    disp.z += waveQ[i] * waveAmp[i] * waveDir[i].y * cos;
+
+                    // vertical slope (derivative of Y)
+                    dy_dx += waveAmp[i] * waveK[i] * cos * waveDir[i].x;
+                    dy_dz += waveAmp[i] * waveK[i] * cos * waveDir[i].y;
+
+                    // horizontal derivative (derivative of displacement X & Z)
+                    dx_dx += -waveQ[i] * waveAmp[i] * waveK[i] * sin * waveDir[i].x * waveDir[i].x;
+                    dz_dz += -waveQ[i] * waveAmp[i] * waveK[i] * sin * waveDir[i].y * waveDir[i].y;
+                }
+
+                int idx = y * size + x;
+                dispPixels[idx] = new Color(disp.x, disp.y, disp.z, 1);
+                
+                // Derivatives must store dx_dx * lambda and dz_dz * lambda in Blue & Alpha for correct normal slope calculation in the shader!
+                derivPixels[idx] = new Color(dy_dx, dy_dz, dx_dx * lambda, dz_dz * lambda);
+
+                // Jacobian check using lambda-scaled horizontal derivatives
+                float jacobian = (1f + dx_dx * lambda) * (1f + dz_dz * lambda);
+                float prevFoam = turbPixels[idx].r;
+                float currentFoam = prevFoam + Time.deltaTime * 0.5f / Mathf.Max(jacobian, 0.5f);
+                currentFoam = Mathf.Min(jacobian, currentFoam);
+                turbPixels[idx] = new Color(currentFoam, currentFoam, currentFoam, 1);
+            }
+        }
+
+        cpuDisplacement.SetPixels(dispPixels);
+        cpuDisplacement.Apply();
+
+        cpuDerivatives.SetPixels(derivPixels);
+        cpuDerivatives.Apply();
+
+        cpuTurbulence.SetPixels(turbPixels);
+        cpuTurbulence.Apply();
+
+        Graphics.Blit(cpuDisplacement, displacement);
+        Graphics.Blit(cpuDerivatives, derivatives);
+        Graphics.Blit(cpuTurbulence, turbulence);
 
         derivatives.GenerateMips();
         turbulence.GenerateMips();

@@ -13,6 +13,9 @@ public class FeatureTesting : MonoBehaviour
     [Tooltip("Jika aktif, menggunakan AsyncGPUReadback. Jika nonaktif, menggunakan ReadPixels sinkronus (menyebabkan GPU stall).")]
     public bool enableAsyncReadback = true;
 
+    [Tooltip("Jika aktif, kalkulasi FFT berjalan di GPU. Jika nonaktif, beralih ke kalkulasi Gerstner Waves di CPU.")]
+    public bool enableGPUSimulation = true;
+
     [Tooltip("Jika aktif, menggunakan Clipmap Material LOD. Jika nonaktif, memaksa material detail tertinggi (CLOSE) di semua jarak.")]
     public bool enableMaterialLOD = true;
 
@@ -58,6 +61,7 @@ public class FeatureTesting : MonoBehaviour
             // optimize = NOT recalculate always
             wavesGenerator.alwaysRecalculateInitials = !enableHashChangeDetection;
             wavesGenerator.useAsyncReadback = enableAsyncReadback;
+            wavesGenerator.useGPUSimulation = enableGPUSimulation;
         }
 
         if (oceanGeometry != null)
@@ -98,7 +102,7 @@ public class FeatureTesting : MonoBehaviour
 
         float boxSize = 36f;
         float panelWidth = 340f;
-        float panelHeight = 230f;
+        float panelHeight = 255f;
 
         if (minimized)
         {
@@ -189,6 +193,8 @@ public class FeatureTesting : MonoBehaviour
         GUILayout.Space(10);
 
         // Checkbox Toggles untuk mengontrol optimalisasi
+        enableGPUSimulation = GUILayout.Toggle(enableGPUSimulation, " Enable GPU Simulation (Compute Shader)");
+        GUILayout.Space(5);
         enableHashChangeDetection = GUILayout.Toggle(enableHashChangeDetection, " Enable Hash Change Detection (CPU)");
         GUILayout.Space(5);
         enableAsyncReadback = GUILayout.Toggle(enableAsyncReadback, " Enable Async GPU Readback (GPU-to-CPU)");
@@ -200,6 +206,7 @@ public class FeatureTesting : MonoBehaviour
         // Tombol Reset ke mode optimal (Default)
         if (GUILayout.Button("Reset ke Mode Optimal (Semua Aktif)"))
         {
+            enableGPUSimulation = true;
             enableHashChangeDetection = true;
             enableAsyncReadback = true;
             enableMaterialLOD = true;
