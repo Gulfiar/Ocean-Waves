@@ -23,11 +23,6 @@ public class FeatureTesting : MonoBehaviour
     [SerializeField] bool showDebugUI = true;
     [SerializeField] bool minimized = false;
 
-    // Variabel kalkulasi FPS
-    float deltaTime = 0.0f;
-    float msec;
-    float fps;
-
     private GUIStyle tooltipStyle;
     private GUIStyle minimizeBtnStyle;
 
@@ -39,17 +34,18 @@ public class FeatureTesting : MonoBehaviour
         if (oceanGeometry == null)
             oceanGeometry = FindFirstObjectByType<OceanGeometry>();
 
+        // Tambahkan FPSDisplay secara otomatis jika belum ada
+        if (gameObject.GetComponent<FPSDisplay>() == null)
+        {
+            gameObject.AddComponent<FPSDisplay>();
+        }
+
         // Sinkronisasi status awal
         ApplySettings();
     }
 
     private void Update()
     {
-        // Hitung FPS secara real-time
-        deltaTime += (Time.unscaledDeltaTime - deltaTime) * 0.1f;
-        msec = deltaTime * 1000.0f;
-        fps = 1.0f / deltaTime;
-
         // Terapkan toggle optimasi
         ApplySettings();
     }
@@ -102,7 +98,7 @@ public class FeatureTesting : MonoBehaviour
 
         float boxSize = 36f;
         float panelWidth = 340f;
-        float panelHeight = 255f;
+        float panelHeight = 215f;
 
         if (minimized)
         {
@@ -174,22 +170,6 @@ public class FeatureTesting : MonoBehaviour
             minimized = true;
         
         GUILayout.BeginArea(new Rect(x + 10f, y + 25f, panelWidth - 20f, panelHeight - 35f));
-        GUILayout.Space(10);
-
-        // Menampilkan teks FPS dengan indikasi warna
-        string fpsText = string.Format("FPS: {0:0.0} ({1:0.0} ms)", fps, msec);
-        GUIStyle fpsStyle = new GUIStyle(GUI.skin.label);
-        fpsStyle.fontStyle = FontStyle.Bold;
-        fpsStyle.fontSize = 14;
-
-        if (fps >= 60.0f)
-            fpsStyle.normal.textColor = Color.green;
-        else if (fps >= 30.0f)
-            fpsStyle.normal.textColor = Color.yellow;
-        else
-            fpsStyle.normal.textColor = Color.red;
-
-        GUILayout.Label(fpsText, fpsStyle);
         GUILayout.Space(10);
 
         // Checkbox Toggles untuk mengontrol optimalisasi
