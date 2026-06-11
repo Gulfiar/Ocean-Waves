@@ -20,8 +20,8 @@ public class FPSDisplay : MonoBehaviour
 
     private void OnGUI()
     {
-        float width = 145f;
-        float height = 65f;
+        float width = 125f;
+        float height = 30f;
 
         // Initialize position at bottom right of the screen
         if (!initializedPos && Screen.width > 0 && Screen.height > 0)
@@ -37,17 +37,9 @@ public class FPSDisplay : MonoBehaviour
         {
             fpsStyle = new GUIStyle(GUI.skin.label)
             {
-                fontSize = 14,
+                fontSize = 13,
                 fontStyle = FontStyle.Bold,
                 alignment = TextAnchor.MiddleCenter
-            };
-
-            titleStyle = new GUIStyle(GUI.skin.label)
-            {
-                fontSize = 9,
-                fontStyle = FontStyle.Bold,
-                alignment = TextAnchor.MiddleCenter,
-                normal = { textColor = new Color(0.7f, 0.7f, 0.7f) }
             };
         }
 
@@ -55,31 +47,33 @@ public class FPSDisplay : MonoBehaviour
         if (windowRect.x > Screen.width) windowRect.x = Screen.width - width - 15f;
         if (windowRect.y > Screen.height) windowRect.y = Screen.height - height - 15f;
 
-        // Draw a dark glassmorphic window box that is draggable
-        GUI.color = new Color(0.04f, 0.04f, 0.08f, 0.88f);
-        windowRect = GUI.Window(999, windowRect, DrawFPSWindow, "", GUI.skin.box);
-        GUI.color = Color.white;
+        // Draw a completely transparent window box that is draggable (using GUIStyle.none)
+        windowRect = GUI.Window(999, windowRect, DrawFPSWindow, "", GUIStyle.none);
     }
 
     private void DrawFPSWindow(int windowID)
     {
         // Color coding for FPS
+        Color mainColor = Color.green;
         if (fps >= 60.0f)
-            fpsStyle.normal.textColor = Color.green;
+            mainColor = Color.green;
         else if (fps >= 30.0f)
-            fpsStyle.normal.textColor = Color.yellow;
+            mainColor = Color.yellow;
         else
-            fpsStyle.normal.textColor = Color.red;
+            mainColor = Color.red;
 
-        // Header label
-        GUILayout.Label(":: FPS MONITOR (DRAG) ::", titleStyle);
-        GUILayout.Space(2);
+        // FPS and frame time details in one single line
+        string fpsText = string.Format("{0:0.0} FPS \n({1:0.0} ms)", fps, msec);
 
-        // FPS and frame time details
-        string fpsText = string.Format("{0:0.0} FPS\n({1:0.0} ms)", fps, msec);
-        GUILayout.Label(fpsText, fpsStyle);
+        // Draw black drop-shadow for high-contrast readability against the waves
+        fpsStyle.normal.textColor = new Color(0f, 0f, 0f, 0.9f);
+        GUI.Label(new Rect(1.5f, 1.5f, windowRect.width, windowRect.height), fpsText, fpsStyle);
 
-        // Make the entire box draggable
+        // Draw main colored text
+        fpsStyle.normal.textColor = mainColor;
+        GUI.Label(new Rect(0f, 0f, windowRect.width, windowRect.height), fpsText, fpsStyle);
+
+        // Make the entire text area draggable with the mouse
         GUI.DragWindow(new Rect(0, 0, windowRect.width, windowRect.height));
     }
 }
