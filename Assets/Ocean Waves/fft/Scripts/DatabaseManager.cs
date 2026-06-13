@@ -554,6 +554,8 @@ public class DatabaseManager : MonoBehaviour
         yield return FirestoreAuth.GetAccessToken(t => token = t);
         if (token == null) { IsLoading = false; yield break; }
 
+        Debug.Log($"[TOKEN DISINI] Copy token ini ke Postman:\nBearer {token}");
+
         string url = $"{FirestoreBaseUrl}/{Uri.EscapeDataString(CurrentCollection)}";
         using (var req = UnityWebRequest.Get(url))
         {
