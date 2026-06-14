@@ -1,3 +1,4 @@
+#if UNITY_EDITOR
 using UnityEngine;
 using UnityEditor;
 
@@ -92,3 +93,4 @@ public class DatabaseManagerEditor : Editor
         serializedObject.ApplyModifiedProperties();
     }
 }
+#endif
