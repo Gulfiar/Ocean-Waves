@@ -16,8 +16,8 @@ public class BuoyDateTimePicker : MonoBehaviour
     [SerializeField] private DatabaseManager databaseManager;
 
     [Header("Display Settings")]
-    [Tooltip("Tampilkan picker UI")]
-    [SerializeField] private bool showPicker = true;
+    [Tooltip("Apakah UI Date & Time picker dimunculkan secara default saat aplikasi dimulai?")]
+    [SerializeField] private bool showUIOnStart = true;
 
     [Tooltip("Posisi panel dari kiri layar")]
     [SerializeField] private float panelX = 15f;
@@ -38,8 +38,8 @@ public class BuoyDateTimePicker : MonoBehaviour
     private int selectedDay;
     private int selectedHour;
     private bool calendarOpen = true;
-    [SerializeField] private bool minimized = false;
     private float sliderValue;
+    private bool showPicker;
 
     // ─── Layout constants ────────────────────────────────────────
     private const float PANEL_WIDTH = 310f;
@@ -47,8 +47,6 @@ public class BuoyDateTimePicker : MonoBehaviour
     private const float HEADER_HEIGHT = 32f;
     private const float ROW_HEIGHT = 22f;
     private const float PADDING = 12f;
-    private const float MINIMIZED_WIDTH = 200f;
-    private const float MINIMIZED_HEIGHT = 32f;
 
     // ─── Colors ──────────────────────────────────────────────────
     private static readonly Color panelBg = new Color(0.04f, 0.04f, 0.08f, 0.92f);
@@ -66,7 +64,7 @@ public class BuoyDateTimePicker : MonoBehaviour
     private static readonly Color sliderHandleColor = new Color(0.4f, 0.7f, 1f, 1f);
 
     // ─── Styles (lazy init) ──────────────────────────────────────
-    private GUIStyle titleStyle, monthLabelStyle, navBtnStyle, minimizeBtnStyle;
+    private GUIStyle titleStyle, monthLabelStyle, navBtnStyle;
     private GUIStyle dayHeaderStyle, dayCellStyle, dayCellSelectedStyle, dayCellTodayStyle, dayCellDimStyle;
     private GUIStyle sectionLabelStyle, statusStyle, fetchBtnStyle, hourLabelStyle, tooltipStyle;
     private bool stylesInit;
@@ -80,6 +78,7 @@ public class BuoyDateTimePicker : MonoBehaviour
 
     private void Start()
     {
+        showPicker = showUIOnStart;
         if (databaseManager == null)
             databaseManager = FindObjectOfType<DatabaseManager>();
 
@@ -210,60 +209,7 @@ public class BuoyDateTimePicker : MonoBehaviour
         GUI.Label(new Rect(cx, cy, innerW, ROW_HEIGHT), statusText, statusStyle);
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    //  MINIMIZED VIEW
-    // ═══════════════════════════════════════════════════════════════
 
-    private void DrawMinimized()
-    {
-        float boxSize = 36f;
-        float x = panelX;
-        float y = panelY;
-
-        Rect minRect = new Rect(x, y, boxSize, boxSize);
-        GUI.color = panelBg;
-        GUI.DrawTexture(minRect, Texture2D.whiteTexture);
-        GUI.color = Color.white;
-        DrawBorder(minRect, borderColor);
-
-        // Styling tombol ikon emoji
-        GUIStyle iconStyle = new GUIStyle(GUI.skin.button)
-        {
-            fontSize = 18,
-            alignment = TextAnchor.MiddleCenter,
-            normal = { textColor = textBright },
-            hover = { textColor = accentColor },
-            active = { textColor = accentColor }
-        };
-        iconStyle.normal.background = null;
-        iconStyle.hover.background = null;
-        iconStyle.active.background = null;
-
-        // Klik untuk mengembalikan ke tampilan penuh
-        if (GUI.Button(minRect, "📅", iconStyle))
-            minimized = false;
-
-        // Menampilkan tooltip interaktif saat melayang di atas ikon
-        if (minRect.Contains(Event.current.mousePosition))
-        {
-            string tooltipText = $"Pilih Waktu (📅 {currentDate} {selectedHour:D2}:00)";
-            Vector2 tooltipSize = tooltipStyle.CalcSize(new GUIContent(tooltipText));
-            tooltipSize.x += 12f;
-            tooltipSize.y += 6f;
-
-            float ttX = x + boxSize + 8f;
-            float ttY = y + (boxSize - tooltipSize.y) / 2f;
-
-            Rect ttRect = new Rect(ttX, ttY, tooltipSize.x, tooltipSize.y);
-            GUI.color = panelBg;
-            GUI.DrawTexture(ttRect, Texture2D.whiteTexture);
-            
-            DrawBorder(ttRect, borderColor);
-            GUI.color = Color.white;
-
-            GUI.Label(new Rect(ttX + 6f, ttY + 3f, tooltipSize.x, tooltipSize.y), tooltipText, tooltipStyle);
-        }
-    }
 
     // ═══════════════════════════════════════════════════════════════
     //  COMPACT DATE DISPLAY
@@ -604,18 +550,7 @@ public class BuoyDateTimePicker : MonoBehaviour
         navBtnStyle.hover.background = null;
         navBtnStyle.active.background = null;
 
-        minimizeBtnStyle = new GUIStyle(GUI.skin.button)
-        {
-            fontSize = 14,
-            fontStyle = FontStyle.Bold,
-            alignment = TextAnchor.MiddleCenter,
-            normal = { textColor = textDim },
-            hover = { textColor = textBright },
-            active = { textColor = textBright },
-        };
-        minimizeBtnStyle.normal.background = null;
-        minimizeBtnStyle.hover.background = null;
-        minimizeBtnStyle.active.background = null;
+
 
         dayHeaderStyle = new GUIStyle(GUI.skin.label)
         {

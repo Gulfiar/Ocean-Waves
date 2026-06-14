@@ -21,15 +21,15 @@ public class FeatureTesting : MonoBehaviour
     public bool enableMaterialLOD = true;
 
     [Header("UI Settings")]
-    [SerializeField] bool showDebugUI = true;
-    [SerializeField] bool minimized = false;
+    [Tooltip("Apakah UI pengujian dimunculkan secara default saat aplikasi dimulai?")]
+    [SerializeField] bool showUIOnStart = true;
 
+    private bool showDebugUI;
     private GUIStyle tooltipStyle;
-    private GUIStyle minimizeBtnStyle;
 
     private void Start()
     {
-        // Cari otomatis jika referensi kosong
+        showDebugUI = showUIOnStart;
         if (wavesGenerator == null)
             wavesGenerator = FindFirstObjectByType<WavesGenerator>();
         if (oceanGeometry == null)
@@ -81,19 +81,6 @@ public class FeatureTesting : MonoBehaviour
             fontStyle = FontStyle.Bold,
             normal = { textColor = Color.white }
         };
-
-        minimizeBtnStyle = new GUIStyle(GUI.skin.button)
-        {
-            fontSize = 12,
-            fontStyle = FontStyle.Bold,
-            alignment = TextAnchor.MiddleCenter,
-            normal = { textColor = new Color(0.7f, 0.7f, 0.7f) },
-            hover = { textColor = Color.white },
-            active = { textColor = Color.white },
-        };
-        minimizeBtnStyle.normal.background = null;
-        minimizeBtnStyle.hover.background = null;
-        minimizeBtnStyle.active.background = null;
     }
 
     private void OnGUI()
