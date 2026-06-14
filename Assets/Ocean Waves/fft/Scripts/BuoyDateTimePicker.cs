@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 /// <summary>
 /// Interactive on-screen Date & Time picker UI for buoy data.
@@ -93,6 +94,14 @@ public class BuoyDateTimePicker : MonoBehaviour
         UpdateCurrentDateString();
     }
 
+    private void Update()
+    {
+        if (Keyboard.current != null && Keyboard.current.xKey.wasPressedThisFrame)
+        {
+            showPicker = !showPicker;
+        }
+    }
+
     // ═══════════════════════════════════════════════════════════════
     //  ON GUI
     // ═══════════════════════════════════════════════════════════════
@@ -101,12 +110,6 @@ public class BuoyDateTimePicker : MonoBehaviour
     {
         if (!showPicker) return;
         InitStyles();
-
-        if (minimized)
-        {
-            DrawMinimized();
-            return;
-        }
 
         // ─── Calculate panel height ──────────────────────────────
         float ph = PADDING; // top padding
@@ -152,16 +155,12 @@ public class BuoyDateTimePicker : MonoBehaviour
         float innerW = PANEL_WIDTH - PADDING * 2;
 
         // ─── Title bar ───────────────────────────────────────────
-        GUI.Label(new Rect(cx, cy, innerW - 60f, HEADER_HEIGHT), "📅  DATE & TIME", titleStyle);
+        GUI.Label(new Rect(cx, cy, innerW - 36f, HEADER_HEIGHT), "📅  DATE & TIME", titleStyle);
 
         // Toggle calendar button
         string toggleText = calendarOpen ? "▲" : "▼";
-        if (GUI.Button(new Rect(x + PANEL_WIDTH - 68f, cy + 2f, 28f, 24f), toggleText, navBtnStyle))
+        if (GUI.Button(new Rect(x + PANEL_WIDTH - 36f, cy + 2f, 28f, 24f), toggleText, navBtnStyle))
             calendarOpen = !calendarOpen;
-
-        // Minimize button
-        if (GUI.Button(new Rect(x + PANEL_WIDTH - 36f, cy + 2f, 28f, 24f), "─", minimizeBtnStyle))
-            minimized = true;
 
         cy += HEADER_HEIGHT + 4f;
 

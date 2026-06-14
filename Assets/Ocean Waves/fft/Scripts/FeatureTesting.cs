@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.InputSystem;
 
 public class FeatureTesting : MonoBehaviour
 {
@@ -46,6 +47,10 @@ public class FeatureTesting : MonoBehaviour
 
     private void Update()
     {
+        if (Keyboard.current != null && Keyboard.current.zKey.wasPressedThisFrame)
+        {
+            showDebugUI = !showDebugUI;
+        }
         // Terapkan toggle optimasi
         ApplySettings();
     }
@@ -100,59 +105,6 @@ public class FeatureTesting : MonoBehaviour
         float panelWidth = 340f;
         float panelHeight = 215f;
 
-        if (minimized)
-        {
-            float mx = 15f;
-            float my = Screen.height - boxSize - 15f;
-
-            Rect minRect = new Rect(mx, my, boxSize, boxSize);
-            
-            // Draw background
-            GUI.color = new Color(0.04f, 0.04f, 0.08f, 0.88f);
-            GUI.DrawTexture(minRect, Texture2D.whiteTexture);
-            GUI.color = Color.white;
-            DrawBorder(minRect, new Color(0.2f, 0.5f, 0.8f, 0.5f));
-
-            // Emoji icon
-            GUIStyle iconStyle = new GUIStyle(GUI.skin.button)
-            {
-                fontSize = 18,
-                alignment = TextAnchor.MiddleCenter,
-                normal = { textColor = Color.white },
-                hover = { textColor = new Color(0.25f, 0.55f, 0.9f) },
-                active = { textColor = new Color(0.25f, 0.55f, 0.9f) }
-            };
-            iconStyle.normal.background = null;
-            iconStyle.hover.background = null;
-            iconStyle.active.background = null;
-
-            if (GUI.Button(minRect, "⚙️", iconStyle))
-                minimized = false;
-
-            // Tooltip
-            if (minRect.Contains(Event.current.mousePosition))
-            {
-                string tooltipText = "Tampilkan Benchmarker Performa (⚙️)";
-                Vector2 tooltipSize = tooltipStyle.CalcSize(new GUIContent(tooltipText));
-                tooltipSize.x += 12f;
-                tooltipSize.y += 6f;
-
-                float ttX = mx + boxSize + 8f;
-                float ttY = my + (boxSize - tooltipSize.y) / 2f;
-
-                Rect ttRect = new Rect(ttX, ttY, tooltipSize.x, tooltipSize.y);
-                GUI.color = new Color(0.04f, 0.04f, 0.08f, 0.92f);
-                GUI.DrawTexture(ttRect, Texture2D.whiteTexture);
-                
-                // Border
-                DrawBorder(ttRect, new Color(0.2f, 0.5f, 0.8f, 0.5f));
-                GUI.color = Color.white;
-
-                GUI.Label(new Rect(ttX + 6f, ttY + 3f, tooltipSize.x, tooltipSize.y), tooltipText, tooltipStyle);
-            }
-            return;
-        }
-
         // Draw at Bottom-Left dynamically based on Screen.height
         float x = 15f;
         float y = Screen.height - panelHeight - 15f;
@@ -165,10 +117,6 @@ public class FeatureTesting : MonoBehaviour
 
         GUI.Label(new Rect(x + 10f, y + 4f, panelWidth - 44f, 20f), "⚙️  PERFORMANCE BENCHMARK", new GUIStyle(GUI.skin.label) { fontStyle = FontStyle.Bold, normal = { textColor = Color.white } });
 
-        // Minimize button in header
-        if (GUI.Button(new Rect(x + panelWidth - 36f, y + 2f, 28f, 20f), "─", minimizeBtnStyle))
-            minimized = true;
-        
         GUILayout.BeginArea(new Rect(x + 10f, y + 25f, panelWidth - 20f, panelHeight - 35f));
         GUILayout.Space(10);
 
