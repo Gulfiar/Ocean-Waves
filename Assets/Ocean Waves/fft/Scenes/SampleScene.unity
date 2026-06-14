@@ -180,6 +180,7 @@ MonoBehaviour:
   wavesSettings: {fileID: 11400000, guid: a15d9b9d6a919584db82c8af30e854c9, type: 2}
   alwaysRecalculateInitials: 0
   useAsyncReadback: 1
+  useGPUSimulation: 1
   lengthScale0: 250
   lengthScale1: 17
   lengthScale2: 5
@@ -283,13 +284,12 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BuoyDateTimePicker
   databaseManager: {fileID: 0}
-  showPicker: 1
+  showUIOnStart: 0
   panelX: 18
   panelY: 50
   autoFetch: 1
   currentDate: 
   currentHour: 7
-  minimized: 1
 --- !u!114 &77222655
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -306,9 +306,9 @@ MonoBehaviour:
   oceanGeometry: {fileID: 0}
   enableHashChangeDetection: 1
   enableAsyncReadback: 1
+  enableGPUSimulation: 1
   enableMaterialLOD: 1
-  showDebugUI: 1
-  minimized: 1
+  showUIOnStart: 0
 --- !u!1 &281865644
 GameObject:
   m_ObjectHideFlags: 0
