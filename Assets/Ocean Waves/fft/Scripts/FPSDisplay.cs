@@ -10,6 +10,13 @@ public class FPSDisplay : MonoBehaviour
     private GUIStyle titleStyle;
     private bool initializedPos = false;
 
+    private void Awake()
+    {
+        // Memaksa unlock FPS limits untuk keperluan benchmarking/testing
+        QualitySettings.vSyncCount = 0;
+        Application.targetFrameRate = -1;
+    }
+
     private void Update()
     {
         // Calculate FPS dynamically
