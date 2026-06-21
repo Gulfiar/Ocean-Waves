@@ -405,6 +405,33 @@ public class OceanGeometry : MonoBehaviour
         return mesh;
     }
 
+    public void SetCascadeTextures(int cascadeIndex, Texture displacement, Texture derivatives, Texture turbulence)
+    {
+        string dispName = "_Displacement_c" + cascadeIndex;
+        string derivName = "_Derivatives_c" + cascadeIndex;
+        string turbName = "_Turbulence_c" + cascadeIndex;
+
+        if (oceanMaterial != null)
+        {
+            oceanMaterial.SetTexture(dispName, displacement);
+            oceanMaterial.SetTexture(derivName, derivatives);
+            oceanMaterial.SetTexture(turbName, turbulence);
+        }
+
+        if (materials != null)
+        {
+            for (int i = 0; i < materials.Length; i++)
+            {
+                if (materials[i] != null)
+                {
+                    materials[i].SetTexture(dispName, displacement);
+                    materials[i].SetTexture(derivName, derivatives);
+                    materials[i].SetTexture(turbName, turbulence);
+                }
+            }
+        }
+    }
+
     class Element
     {
         public Transform Transform;

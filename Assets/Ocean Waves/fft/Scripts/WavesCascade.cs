@@ -32,6 +32,7 @@ public class WavesCascade
     readonly RenderTexture derivatives;
     readonly RenderTexture turbulence;
 
+    public float Lambda { get => lambda; set => lambda = value; }
     float lambda;
     float lengthScale;
     Texture2D cpuDisplacement;

@@ -45,6 +45,11 @@ public class WavesGenerator : MonoBehaviour
     // Change detection: cached hash of previous settings
     int prevSettingsHash;
 
+    [Header("Presentation Overrides")]
+    public float timeScale = 1.0f;
+    public float? lambdaOverride = null;
+    private float customTime;
+
     private void Awake()
     {
         Application.targetFrameRate = -1;
@@ -133,17 +138,33 @@ public class WavesGenerator : MonoBehaviour
             prevSettingsHash = currentHash;
         }
 
+        // Apply lambda overrides to the cascades
+        if (lambdaOverride.HasValue)
+        {
+            cascade0.Lambda = lambdaOverride.Value;
+            cascade1.Lambda = lambdaOverride.Value;
+            cascade2.Lambda = lambdaOverride.Value;
+        }
+        else if (wavesSettings != null)
+        {
+            cascade0.Lambda = wavesSettings.lambda;
+            cascade1.Lambda = wavesSettings.lambda;
+            cascade2.Lambda = wavesSettings.lambda;
+        }
+
+        customTime += Time.deltaTime * timeScale;
+
         if (useGPUSimulation)
         {
-            cascade0.CalculateWavesAtTime(Time.time);
-            cascade1.CalculateWavesAtTime(Time.time);
-            cascade2.CalculateWavesAtTime(Time.time);
+            cascade0.CalculateWavesAtTime(customTime);
+            cascade1.CalculateWavesAtTime(customTime);
+            cascade2.CalculateWavesAtTime(customTime);
         }
         else
         {
-            cascade0.CalculateWavesAtTimeCPU(Time.time, wavesSettings);
-            cascade1.CalculateWavesAtTimeCPU(Time.time, wavesSettings);
-            cascade2.CalculateWavesAtTimeCPU(Time.time, wavesSettings);
+            cascade0.CalculateWavesAtTimeCPU(customTime, wavesSettings);
+            cascade1.CalculateWavesAtTimeCPU(customTime, wavesSettings);
+            cascade2.CalculateWavesAtTimeCPU(customTime, wavesSettings);
         }
 
         RequestReadbacks();
