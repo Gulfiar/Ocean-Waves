@@ -17,6 +17,9 @@ public class OceanGeometry : MonoBehaviour
     [SerializeField]
     public bool useMaterialLOD = true;
 
+    public int ClipLevels { get => clipLevels; set => clipLevels = value; }
+    public float LengthScale { get => lengthScale; set => lengthScale = value; }
+
     [SerializeField]
     float lengthScale = 10;
     [SerializeField, Range(1, 40)]
