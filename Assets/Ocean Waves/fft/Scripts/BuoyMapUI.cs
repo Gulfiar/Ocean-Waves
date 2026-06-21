@@ -19,7 +19,7 @@ public class BuoyMapUI : MonoBehaviour
     [SerializeField] private BuoyDataOverlayUI dataOverlayUI;
     
     [Tooltip("Kamera (opsional) jika ingin mengubah view saat di peta vs simulasi")]
-    [SerializeField] private CamController camController;
+    [SerializeField] private Behaviour camController;
 
     private void Start()
     {
