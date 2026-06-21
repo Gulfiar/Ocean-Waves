@@ -19,6 +19,7 @@ public class OceanGeometry : MonoBehaviour
 
     public int ClipLevels { get => clipLevels; set => clipLevels = value; }
     public float LengthScale { get => lengthScale; set => lengthScale = value; }
+    public Transform Viewer { get => viewer; set => viewer = value; }
 
     [SerializeField]
     float lengthScale = 10;

@@ -320,20 +320,13 @@ MonoBehaviour:
   m_GameObject: {fileID: 77222647}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 2e712153f4bde404987a046ba97bcbe4, type: 3}
+  m_Script: {fileID: 11500000, guid: c4c51da98f75e5b48a34839c1abd5d7a, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: OceanWavesMain::OceanPresentationController
-  currentStep: 0
-  showPresentationUI: 1
+  m_EditorClassIdentifier: OceanWavesMain::PresentationController
   wavesGenerator: {fileID: 0}
   oceanGeometry: {fileID: 0}
-  buoyDataApplier: {fileID: 0}
-  databaseManager: {fileID: 0}
-  mainCamera: {fileID: 0}
-  enableWireframe: 0
-  showCascade0: 1
-  showCascade1: 1
-  showCascade2: 1
+  presentationCamera: {fileID: 0}
+  cameraLerpSpeed: 4
 --- !u!1 &281865644
 GameObject:
   m_ObjectHideFlags: 0
@@ -999,7 +992,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!114 &818822749
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1424,8 +1417,6 @@ GameObject:
   - component: {fileID: 963194228}
   - component: {fileID: 963194227}
   - component: {fileID: 963194226}
-  - component: {fileID: 963194229}
-  - component: {fileID: 963194230}
   m_Layer: 0
   m_Name: Main Camera
   m_TagString: MainCamera
@@ -1507,58 +1498,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 16.076, y: 164.11, z: 0}
---- !u!114 &963194229
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 963194225}
-  m_Enabled: 0
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 20840d83399c2a544ad382839e61e3a0, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  boost: 3.5
-  positionLerpTime: 0.2
-  mouseSensitivityCurve:
-    serializedVersion: 2
-    m_Curve:
-    - serializedVersion: 3
-      time: 0
-      value: 0.5
-      inSlope: 0
-      outSlope: 5
-      tangentMode: 0
-      weightedMode: 0
-      inWeight: 0
-      outWeight: 0
-    - serializedVersion: 3
-      time: 1
-      value: 2.5
-      inSlope: 0
-      outSlope: 0
-      tangentMode: 0
-      weightedMode: 0
-      inWeight: 0
-      outWeight: 0
-    m_PreInfinity: 2
-    m_PostInfinity: 2
-    m_RotationOrder: 4
-  rotationLerpTime: 0.01
-  invertY: 0
---- !u!114 &963194230
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 963194225}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 59a818eaf96544c4994335870fdfe141, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: Crest.Examples::Crest.Examples.CamController
 --- !u!1 &1050219986
 GameObject:
   m_ObjectHideFlags: 0

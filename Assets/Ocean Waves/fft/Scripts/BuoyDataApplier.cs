@@ -68,6 +68,13 @@ public class BuoyDataApplier : MonoBehaviour
     /// <summary>Data buoy yang terakhir diterapkan.</summary>
     public BuoyData LastAppliedData { get; private set; }
 
+    public float AppliedWindSpeed => applied_WindSpeed;
+    public float AppliedWindDirection => applied_WindDirection;
+    public float AppliedFetch => applied_Fetch;
+    public float AppliedScale => applied_Scale;
+    public float AppliedTheoreticalHs => applied_TheoreticalHs;
+    public string AppliedFromKey => appliedFromKey;
+
     // ═══════════════════════════════════════════════════════════════════
     //  LIFECYCLE
     // ═══════════════════════════════════════════════════════════════════
