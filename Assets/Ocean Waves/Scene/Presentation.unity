@@ -201,7 +201,7 @@ Transform:
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
+  m_ConstrainProportionsScale: 1
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
@@ -320,13 +320,22 @@ MonoBehaviour:
   m_GameObject: {fileID: 77222647}
   m_Enabled: 1
   m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: c4c51da98f75e5b48a34839c1abd5d7a, type: 3}
+  m_Script: {fileID: 11500000, guid: 2e712153f4bde404987a046ba97bcbe4, type: 3}
   m_Name: 
-  m_EditorClassIdentifier: OceanWavesMain::PresentationController
+  m_EditorClassIdentifier: OceanWavesMain::OceanPresentationController
   wavesGenerator: {fileID: 0}
   oceanGeometry: {fileID: 0}
-  presentationCamera: {fileID: 0}
-  cameraLerpSpeed: 4
+  buoyDataApplier: {fileID: 0}
+  currentStage: 1
+  panelWidth: 480
+  panelHeight: 700
+  planeFollowsCamera: 0
+  useBuiltInCameraController: 1
+  presentationClipLevels: 2
+  mainSpeed: 20
+  shiftAdd: 50
+  maxShift: 100
+  camSens: 0.25
 --- !u!1 &281865644
 GameObject:
   m_ObjectHideFlags: 0
