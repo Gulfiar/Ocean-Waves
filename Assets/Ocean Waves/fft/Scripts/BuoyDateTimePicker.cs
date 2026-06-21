@@ -28,6 +28,10 @@ public class BuoyDateTimePicker : MonoBehaviour
     [Tooltip("Otomatis fetch data saat tanggal/jam berubah")]
     [SerializeField] private bool autoFetch = true;
 
+    [Header("Real-Time Settings")]
+    [Tooltip("Gunakan waktu sistem saat ini secara real-time")]
+    [SerializeField] private bool useRealTime = true;
+
     [Header("Initial Date (Read-Only)")]
     [SerializeField] private string currentDate = "";
     [SerializeField] private int currentHour = 7;
@@ -66,7 +70,7 @@ public class BuoyDateTimePicker : MonoBehaviour
     // ─── Styles (lazy init) ──────────────────────────────────────
     private GUIStyle titleStyle, monthLabelStyle, navBtnStyle;
     private GUIStyle dayHeaderStyle, dayCellStyle, dayCellSelectedStyle, dayCellTodayStyle, dayCellDimStyle;
-    private GUIStyle sectionLabelStyle, statusStyle, fetchBtnStyle, hourLabelStyle, tooltipStyle;
+    private GUIStyle sectionLabelStyle, statusStyle, fetchBtnStyle, hourLabelStyle, tooltipStyle, toggleStyle;
     private bool stylesInit;
 
     // ─── Day-of-week headers ─────────────────────────────────────
@@ -87,10 +91,15 @@ public class BuoyDateTimePicker : MonoBehaviour
         displayYear = today.Year;
         displayMonth = today.Month;
         selectedDay = today.Day;
-        selectedHour = currentHour > 0 ? currentHour : today.Hour;
+        selectedHour = useRealTime ? today.Hour : (currentHour > 0 ? currentHour : today.Hour);
         sliderValue = selectedHour;
 
         UpdateCurrentDateString();
+
+        if (autoFetch)
+        {
+            FetchSelectedData();
+        }
     }
 
     private void Update()
@@ -98,6 +107,22 @@ public class BuoyDateTimePicker : MonoBehaviour
         if (Keyboard.current != null && Keyboard.current.xKey.wasPressedThisFrame)
         {
             showPicker = !showPicker;
+        }
+
+        if (useRealTime)
+        {
+            DateTime now = DateTime.Now;
+            if (displayYear != now.Year || displayMonth != now.Month || selectedDay != now.Day || selectedHour != now.Hour)
+            {
+                displayYear = now.Year;
+                displayMonth = now.Month;
+                selectedDay = now.Day;
+                selectedHour = now.Hour;
+                sliderValue = selectedHour;
+                currentHour = selectedHour;
+                UpdateCurrentDateString();
+                if (autoFetch) FetchSelectedData();
+            }
         }
     }
 
@@ -114,6 +139,9 @@ public class BuoyDateTimePicker : MonoBehaviour
         float ph = PADDING; // top padding
         ph += HEADER_HEIGHT; // title bar
         ph += 4f;
+
+        // Real-Time toggle height
+        ph += ROW_HEIGHT + 6f;
 
         if (calendarOpen)
         {
@@ -163,6 +191,34 @@ public class BuoyDateTimePicker : MonoBehaviour
 
         cy += HEADER_HEIGHT + 4f;
 
+        // ─── Real Time Toggle ────────────────────────────────────
+        bool newRealTime = GUI.Toggle(new Rect(cx, cy, innerW, ROW_HEIGHT), useRealTime, "  Waktu Nyata (Real-Time)", toggleStyle);
+        if (newRealTime != useRealTime)
+        {
+            useRealTime = newRealTime;
+            if (useRealTime)
+            {
+                // Sync immediately to current system time
+                DateTime now = DateTime.Now;
+                displayYear = now.Year;
+                displayMonth = now.Month;
+                selectedDay = now.Day;
+                selectedHour = now.Hour;
+                sliderValue = selectedHour;
+                currentHour = selectedHour;
+                UpdateCurrentDateString();
+                if (autoFetch) FetchSelectedData();
+            }
+        }
+        cy += ROW_HEIGHT + 6f;
+
+        // Disable selectors if in Real-Time mode
+        bool wasEnabled = GUI.enabled;
+        if (useRealTime)
+        {
+            GUI.enabled = false;
+        }
+
         if (calendarOpen)
         {
             // ─── Month navigation ────────────────────────────────
@@ -191,6 +247,9 @@ public class BuoyDateTimePicker : MonoBehaviour
         cy += ROW_HEIGHT + 4f;
         DrawHourSlider(ref cy, cx, innerW);
         cy += 10f;
+
+        // Restore GUI enabled state for other elements (Fetch and Status)
+        GUI.enabled = wasEnabled;
 
         // ─── Fetch button ────────────────────────────────────────
         Rect fetchRect = new Rect(cx, cy, innerW, 28f);
@@ -628,6 +687,19 @@ public class BuoyDateTimePicker : MonoBehaviour
             fontSize = 11,
             fontStyle = FontStyle.Bold,
             normal = { textColor = textBright }
+        };
+
+        toggleStyle = new GUIStyle(GUI.skin.toggle)
+        {
+            fontSize = 12,
+            alignment = TextAnchor.MiddleLeft,
+            normal = { textColor = textNormal },
+            hover = { textColor = textBright },
+            active = { textColor = textBright },
+            focused = { textColor = textNormal },
+            onNormal = { textColor = textBright },
+            onHover = { textColor = textBright },
+            onActive = { textColor = textBright }
         };
     }
 }
