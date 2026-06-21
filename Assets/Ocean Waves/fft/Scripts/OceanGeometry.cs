@@ -13,6 +13,7 @@ public class OceanGeometry : MonoBehaviour
     bool updateMaterialProperties;
     [SerializeField]
     bool showMaterialLods;
+    public bool ShowMaterialLods { get => showMaterialLods; set => showMaterialLods = value; }
     [SerializeField]
     public bool useMaterialLOD = true;
 

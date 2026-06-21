@@ -170,6 +170,9 @@ public class OceanPresentationController : MonoBehaviour
     {
         if (wavesGenerator == null || oceanGeometry == null) return;
 
+        // Reset LOD colors visualization
+        oceanGeometry.ShowMaterialLods = false;
+
         // Remove buoy if not in step 7
         if (step != PresentationStep.DigitalTwinBuoy)
         {
@@ -526,7 +529,7 @@ public class OceanPresentationController : MonoBehaviour
 
         // Screen parameters
         float panelWidth = 380f;
-        float panelHeight = 620f;
+        float panelHeight = 700f;
         float x = Screen.width - panelWidth - 20f;
         float y = 20f;
 
@@ -578,19 +581,33 @@ public class OceanPresentationController : MonoBehaviour
         }
 
         // Toggles & Control Overrides Area
-        GUILayout.Label("Kontrol Tahapan & Opsi Visual:", subHeaderStyle);
-        GUILayout.Space(3);
-        
-        enableWireframe = GUILayout.Toggle(enableWireframe, " Aktifkan Tampilan Wireframe (LOD)");
-        
-        if (currentStep >= PresentationStep.MultiCascade)
+        GUILayout.Label("Kontrol Kaskade Gelombang:", subHeaderStyle);
+        GUILayout.BeginHorizontal();
+        showCascade0 = GUILayout.Toggle(showCascade0, " C0 (Swell: 250m)");
+        showCascade1 = GUILayout.Toggle(showCascade1, " C1 (Wind: 17m)");
+        showCascade2 = GUILayout.Toggle(showCascade2, " C2 (Ripples: 5m)");
+        GUILayout.EndHorizontal();
+
+        GUILayout.Space(8);
+
+        GUILayout.Label("Kontrol Geometri & Material LOD:", subHeaderStyle);
+        enableWireframe = GUILayout.Toggle(enableWireframe, " Tampilkan Wireframe Mesh (LOD Geometri)");
+
+        if (oceanGeometry != null)
         {
-            GUILayout.Space(3);
-            GUILayout.BeginHorizontal();
-            showCascade0 = GUILayout.Toggle(showCascade0, " Cascade 0 (Swell)");
-            showCascade1 = GUILayout.Toggle(showCascade1, " Cascade 1 (Wind)");
-            showCascade2 = GUILayout.Toggle(showCascade2, " Cascade 2 (Ripples)");
-            GUILayout.EndHorizontal();
+            oceanGeometry.useMaterialLOD = GUILayout.Toggle(oceanGeometry.useMaterialLOD, " Aktifkan Material LOD (CLOSE/MID/FAR)");
+            
+            bool currentLods = oceanGeometry.ShowMaterialLods;
+            bool newLods = GUILayout.Toggle(currentLods, " Visualisasikan Level LOD (Warna)");
+            if (newLods != currentLods)
+            {
+                oceanGeometry.ShowMaterialLods = newLods;
+            }
+
+            if (newLods)
+            {
+                GUILayout.Box("LOD Warna: MERAH (Close), HIJAU (Mid), BIRU (Far)", formulaStyle);
+            }
         }
 
         GUILayout.FlexibleSpace();

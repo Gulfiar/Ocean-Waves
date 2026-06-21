@@ -135,6 +135,7 @@ GameObject:
   - component: {fileID: 77222653}
   - component: {fileID: 77222654}
   - component: {fileID: 77222655}
+  - component: {fileID: 77222656}
   m_Layer: 0
   m_Name: Ocean
   m_TagString: Untagged
@@ -310,6 +311,29 @@ MonoBehaviour:
   enableGPUSimulation: 1
   enableMaterialLOD: 1
   showUIOnStart: 0
+--- !u!114 &77222656
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 77222647}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2e712153f4bde404987a046ba97bcbe4, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: OceanWavesMain::OceanPresentationController
+  currentStep: 0
+  showPresentationUI: 1
+  wavesGenerator: {fileID: 0}
+  oceanGeometry: {fileID: 0}
+  buoyDataApplier: {fileID: 0}
+  databaseManager: {fileID: 0}
+  mainCamera: {fileID: 0}
+  enableWireframe: 0
+  showCascade0: 1
+  showCascade1: 1
+  showCascade2: 1
 --- !u!1 &281865644
 GameObject:
   m_ObjectHideFlags: 0

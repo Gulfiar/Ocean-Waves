@@ -142,7 +142,7 @@ Material:
     - _Cascade0: 1
     - _Cascade1: 1
     - _Cascade2: 1
-    - _ContactFoam: 1
+    - _ContactFoam: 0
     - _Cutoff: 0.5
     - _DetailNormalMapScale: 1
     - _DstBlend: 0
@@ -151,7 +151,7 @@ Material:
     - _FoamBiasLOD0: 0.84
     - _FoamBiasLOD1: 1.83
     - _FoamBiasLOD2: 2.72
-    - _FoamScale: 2.4
+    - _FoamScale: 0
     - _FogScale: 4.7
     - _FrenselPow: 5
     - _FrenselPowRefr: 51.4
