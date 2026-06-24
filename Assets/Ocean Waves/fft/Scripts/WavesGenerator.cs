@@ -54,6 +54,10 @@ public class WavesGenerator : MonoBehaviour
     {
         Application.targetFrameRate = -1;
         QualitySettings.vSyncCount = 0;
+
+        // Pastikan displacement aktif secara default (untuk presentasi controller)
+        Shader.SetGlobalFloat("_DisplacementEnabled", 1f);
+
         fft = new FastFourierTransform(size, fftShader);
         gaussianNoise = GetNoiseTexture(size);
 

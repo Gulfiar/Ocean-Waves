@@ -19,6 +19,9 @@ Shader "Ocean/Ocean"
         _FoamScale("Foam Scale", Range(0,20)) = 1
         _ContactFoam("Contact Foam", Range(0,1)) = 1
 
+        [Header(Presentation)]
+        _PresentationMode("Presentation Mode", Float) = 0
+        _PresentationTex("Presentation Texture", 2D) = "black" {}
 
         [Header(Cascade 0)]
         [HideInInspector]_Displacement_c0("Displacement C0", 2D) = "black" {}
@@ -40,6 +43,7 @@ Shader "Ocean/Ocean"
 
         CGPROGRAM
         #pragma multi_compile _ MID CLOSE
+        #pragma multi_compile _ DISPLACEMENT_ON
         #pragma surface surf Standard fullforwardshadows vertex:vert addshadow
         #pragma target 4.0
 
@@ -51,6 +55,7 @@ Shader "Ocean/Ocean"
             float3 viewVector;
             float3 worldNormal;
             float4 screenPos;
+            float vertexY;
             INTERNAL_DATA
         };
 
@@ -73,6 +78,9 @@ Shader "Ocean/Ocean"
         float _SSSBase;
         float _SSSScale;
         float _MaterialLODDisabled;
+        float _PresentationMode;
+        sampler2D _PresentationTex;
+        float _DisplacementEnabled;
 
         void vert(inout appdata_full v, out Input o)
         {
@@ -92,17 +100,21 @@ Shader "Ocean/Ocean"
             float3 displacement = 0;
             float largeWavesBias = 0;
 
-            
-            displacement += tex2Dlod(_Displacement_c0, worldUV / LengthScale0) * lod_c0;
-            largeWavesBias = displacement.y;
-            #if defined(MID) || defined(CLOSE)
-            displacement += tex2Dlod(_Displacement_c1, worldUV / LengthScale1) * lod_c1;
-            #endif
-            #if defined(CLOSE)
-            displacement += tex2Dlod(_Displacement_c2, worldUV / LengthScale2) * lod_c2;
-            #endif
-            v.vertex.xyz += mul(unity_WorldToObject,displacement);
+            // Displacement hanya aktif jika _DisplacementEnabled > 0.5
+            if (_DisplacementEnabled > 0.5)
+            {
+                displacement += tex2Dlod(_Displacement_c0, worldUV / LengthScale0) * lod_c0;
+                largeWavesBias = displacement.y;
+                #if defined(MID) || defined(CLOSE)
+                displacement += tex2Dlod(_Displacement_c1, worldUV / LengthScale1) * lod_c1;
+                #endif
+                #if defined(CLOSE)
+                displacement += tex2Dlod(_Displacement_c2, worldUV / LengthScale2) * lod_c2;
+                #endif
+                v.vertex.xyz += mul(unity_WorldToObject, displacement);
+            }
 
+            o.vertexY = displacement.y;
             o.lodScales = float4(lod_c0, lod_c1, lod_c2, max(displacement.y - largeWavesBias * 0.8 - _SSSBase, 0) / _SSSScale);
         }
 
@@ -128,6 +140,88 @@ Shader "Ocean/Ocean"
 
         void surf(Input IN, inout SurfaceOutputStandard o)
         {
+            // ═══ MODE PRESENTASI ═══════════════════════════════════════
+            // _PresentationMode:
+            //   0 = Normal (PBR penuh)
+            //   1 = Flat Color (biru muda solid — plane datar)
+            //   2 = Gaussian Noise (tampilkan tekstur noise)
+            //   3 = Initial Spectrum (tampilkan spektrum h0(k))
+            //   4 = Height Visualization (pewarnaan berdasarkan tinggi)
+            // ═══════════════════════════════════════════════════════════
+
+            if (_PresentationMode > 0.5 && _PresentationMode < 1.5)
+            {
+                // Tahap 1: Flat plane — biru muda solid
+                o.Albedo = float3(0.05, 0.15, 0.3);
+                o.Emission = float3(0.08, 0.22, 0.45);
+                o.Smoothness = 0.85;
+                o.Metallic = 0;
+                o.Normal = float3(0, 0, 1);
+                return;
+            }
+
+            if (_PresentationMode > 1.5 && _PresentationMode < 2.5)
+            {
+                // Tahap 3: Gaussian Noise visualization
+                float2 uv = IN.worldUV / LengthScale0;
+                float4 noiseSample = tex2D(_PresentationTex, uv);
+                float intensity = noiseSample.r * 0.5 + 0.5;
+                o.Albedo = 0;
+                o.Emission = float3(intensity * 0.3, intensity * 0.6, intensity * 1.0);
+                o.Smoothness = 0.5;
+                o.Metallic = 0;
+                o.Normal = float3(0, 0, 1);
+                return;
+            }
+
+            if (_PresentationMode > 2.5 && _PresentationMode < 3.5)
+            {
+                // Tahap 4: Initial Spectrum visualization
+                float2 uv = IN.worldUV / LengthScale0;
+                float4 specSample = tex2D(_PresentationTex, uv);
+                float mag = length(specSample.rg) * 5.0;
+                // Peta warna: biru tua → cyan → kuning → merah
+                float3 specColor;
+                if (mag < 0.33)
+                    specColor = lerp(float3(0.02, 0.02, 0.15), float3(0.0, 0.5, 0.8), mag / 0.33);
+                else if (mag < 0.66)
+                    specColor = lerp(float3(0.0, 0.5, 0.8), float3(0.9, 0.9, 0.1), (mag - 0.33) / 0.33);
+                else
+                    specColor = lerp(float3(0.9, 0.9, 0.1), float3(1.0, 0.2, 0.1), saturate((mag - 0.66) / 0.34));
+                o.Albedo = 0;
+                o.Emission = specColor;
+                o.Smoothness = 0.5;
+                o.Metallic = 0;
+                o.Normal = float3(0, 0, 1);
+                return;
+            }
+
+            if (_PresentationMode > 3.5 && _PresentationMode < 4.5)
+            {
+                // Tahap 5/6: Height-based coloring
+                float h = IN.vertexY;
+                float normalizedH = saturate(h * 0.15 + 0.5);
+                // Gradien: biru tua (rendah) → cyan → hijau (tinggi)
+                float3 heightColor;
+                if (normalizedH < 0.5)
+                    heightColor = lerp(float3(0.02, 0.05, 0.25), float3(0.0, 0.4, 0.6), normalizedH * 2.0);
+                else
+                    heightColor = lerp(float3(0.0, 0.4, 0.6), float3(0.1, 0.8, 0.4), (normalizedH - 0.5) * 2.0);
+                o.Albedo = 0;
+                o.Emission = heightColor;
+                o.Smoothness = 0.7;
+                o.Metallic = 0;
+                // Tetap gunakan normal dari displacement untuk depth feeling
+                float4 derivatives = tex2D(_Derivatives_c0, IN.worldUV / LengthScale0);
+                float2 slope = float2(derivatives.x / (1 + derivatives.z),
+                    derivatives.y / (1 + derivatives.w));
+                float3 worldNormal = normalize(float3(-slope.x, 1, -slope.y));
+                o.Normal = WorldToTangentNormalVector(IN, worldNormal);
+                return;
+            }
+
+            // ═══ MODE NORMAL (PBR PENUH) ═══════════════════════════════
+
             float4 derivatives = tex2D(_Derivatives_c0, IN.worldUV / LengthScale0);
             #if defined(MID) || defined(CLOSE)
             derivatives += tex2D(_Derivatives_c1, IN.worldUV / LengthScale1) * IN.lodScales.y;

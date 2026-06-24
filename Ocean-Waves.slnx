@@ -2,4 +2,5 @@
   <Project Path="OceanWavesMain.csproj" />
   <Project Path="PerformanceTesting.csproj" />
   <Project Path="Assembly-CSharp.csproj" />
+  <Project Path="Presentation.csproj" />
 </Solution>

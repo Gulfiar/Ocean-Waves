@@ -119,6 +119,10 @@ Material:
         m_Texture: {fileID: 2800000, guid: a8c5f4742bdfc64449b6ffc62457a2b0, type: 3}
         m_Scale: {x: 0.1, y: 0.1}
         m_Offset: {x: 0, y: 0}
+    - _PresentationTex:
+        m_Texture: {fileID: 0}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
     - _Turbulence:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
@@ -165,6 +169,7 @@ Material:
     - _Mode: 0
     - _OcclusionStrength: 1
     - _Parallax: 0.02
+    - _PresentationMode: 0
     - _Roughness: 0.311
     - _RoughnessScale: 0.0044
     - _SSSBase: -0.1
